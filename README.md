@@ -21,13 +21,34 @@ It checks for updates on opening when credentials are available, on reconnect, a
 - Removing vaults works offline and atomically deletes their saved notes, file names and unreferenced attachments; GitHub is never changed. Adding vaults downloads only their missing notes, even when the GitHub commit has not changed; it requires network/GitHub access. Failed downloads retain the previous complete selection. Closing Settings without saving discards edits. Existing installs default to all four vaults. Only per-vault note counts are retained for excluded vaults.
 - Separate filters for selected vaults.
 - Markdown tables with alignment, lists, read-only tasks, fenced code with syntax highlighting, footnotes and navigation, callouts (including folds), highlights, safe HTML (such as details/summary/br), dollar/bracket/fenced TeX math, relative links, aliases, wikilinks, and note/heading embeds. Embeds cap depth at three and block cycles. Untrusted HTML is sanitized; executable HTML and raw styling are deliberately not supported.
-- Dark-terminal presentation with bundled JetBrains Mono (regular/bold), compact titles and visible tags; dark regardless of device preference. Fonts, code/math modules and KaTeX assets are self-hosted and offline-cached. No font CDN.
+- NvChad base46 themes with bundled JetBrains Mono (regular/bold), compact titles and visible tags. One Dark is the default regardless of device preference; Settings offers all 98 bundled standard dark/light themes. The device-local choice persists across launches and works offline. Fonts, palettes, code/math modules and KaTeX assets are self-hosted and offline-cached. No font or theme CDN.
 - Responsive list/detail reading view, browser back navigation, keyboard `/` search shortcut.
 - Cached-first installed launch: hosting/auth latency does not block saved notes; first display paints a bounded 50-note page with Show more, while search includes the entire library. Rendering/math/code modules load lazily, background refresh yields until the cached view is ready, and unchanged checks do not rewrite/redraw the library.
 - A pinned-commit snapshot with incremental blob reuse and atomic IndexedDB replacement. Deleted notes disappear on successful refresh. Failed downloads preserve the last complete snapshot.
 - Offline app shell and full note search. Internal raster images/PDFs download on demand and are cached after viewing (20 MB per attachment limit).
-- **Forget this device** clears notes, attachments, configuration and any remembered token, but never touches GitHub. Only the non-sensitive app shell remains cached.
+- **Forget this device** clears notes, attachments, configuration, theme preference and any remembered token, but never touches GitHub. Only the non-sensitive app shell remains cached.
 - Explicit synthetic sample library, never mixed with or saved over the connected repository.
+
+## Themes
+
+Use **Settings → Theme** to apply and save a theme immediately, independently of
+vault selection or GitHub credentials. The picker is also available on the initial
+Connect screen. The choice is local to this browser/device and survives offline
+reloads and browser restarts; **Forget this device** resets it to One Dark.
+If browser storage rejects a save, the previous theme stays active and Settings
+reports the failure. Unknown/removed theme IDs fall back to One Dark.
+
+All 98 standard themes from [NvChad/base46](https://github.com/NvChad/base46/tree/d870ec89a7b2f28c4accce515f97b7bcc5b9d200/lua/base46/themes)
+are bundled at a pinned revision, including the light variants. `base_30` maps to
+the interface and `base_16` to Markdown/code syntax; Neovim-specific `polish_hl`
+and plugin integrations are not emulated. Only the non-sensitive theme ID is
+stored in localStorage, separately from the IndexedDB note cache. A small
+self-hosted script restores it before the page content paints. The installed
+app's static icon/manifest splash colours remain One Dark.
+
+Upstream attribution, MIT notices and the palette-update procedure are in
+[`third_party/base46`](third_party/base46/README.md). Normal builds need no Lua,
+Neovim or upstream network requests.
 
 ## Privacy / security model
 
@@ -61,6 +82,8 @@ npm run test:vaults
 npm run test:rendering
 npm run test:performance
 npm run test:tags
+# Self-contained theme/persistence/offline suite (no preview needed):
+npm run test:themes
 ```
 
 Unit tests cover allowlists, parsing, search/ranking, resolution, incremental/deletion behavior, authentication errors and GET-only networking. Browser tests use **synthetic fixtures and fake tokens**, covering phone navigation, section embeds, injection defense, offline reload/search, token opt-in/opt-out, refresh failure recovery, incremental updates, layout bounds and forgetting the device. Captures are written to `/tmp/pocket-vault-qa/`, never into the repository. `test:installability` starts a real cookie-gated HTTP server and a clean, non-incognito headless Chromium profile, loads the built app, and checks Chrome’s parsed manifest and installability errors. It covers the initial signed-in visit before a service worker can mask manifest-auth failures. The manifest link uses `crossorigin="use-credentials"`, required even on the same origin when the manifest is protected by sign-in. This browser test does not emulate Android’s WebAPK minting service; final installation on the actual phone still requires confirmation.
@@ -89,7 +112,7 @@ Successful repair removes the one-shot `recover` query flag from the current URL
 
 ## Focused source workspace
 
-Setup occupies its own screen until a snapshot exists. Connected users see only the library and reader; settings and filters are on demand. NvChad One Dark-inspired panes use self-hosted JetBrains Mono. Source reading preserves Markdown headings, emphasis delimiters, list markers, fences, tables and spacing, with coloured syntax and concealed clickable link destinations. No generated article title, reading-time block, explanatory welcome, or persistent offline notice. Raw HTML remains inert. Source paints immediately using the existing parser, then a lazy Tree-sitter Markdown parser adds structural highlighting. Runtime and canonical v0.5.4 grammar are self-hosted and cached offline; neither delays the library or initial source paint. CSP permits WebAssembly compilation only, not JavaScript eval. Source mode intentionally shows math, tables and embed notation rather than typesetting them. The existing rich renderer remains available internally for regression coverage.
+Setup occupies its own screen until a snapshot exists. Connected users see only the library and reader; settings and filters are on demand. Base46-themed panes default to NvChad One Dark and use self-hosted JetBrains Mono. Source reading preserves Markdown headings, emphasis delimiters, list markers, fences, tables and spacing, with coloured syntax and concealed clickable link destinations. No generated article title, reading-time block, explanatory welcome, or persistent offline notice. Raw HTML remains inert. Source paints immediately using the existing parser, then a lazy Tree-sitter Markdown parser adds structural highlighting. Runtime and canonical v0.5.4 grammar are self-hosted and cached offline; neither delays the library or initial source paint. CSP permits WebAssembly compilation only, not JavaScript eval. Source mode intentionally shows math, tables and embed notation rather than typesetting them. The existing rich renderer remains available internally for regression coverage.
 
 ## Connection discovery and privacy
 

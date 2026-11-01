@@ -1,9 +1,16 @@
 import { build } from 'esbuild';
 import { cp, mkdir, rm, readFile, writeFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import {themeCSS} from './src/theme-palette.js';
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist', { recursive: true });
 await cp('public', 'dist', { recursive: true });
+const catalog=JSON.parse(await readFile('src/themes/base46.json','utf8'));
+await writeFile('dist/themes.css',themeCSS(catalog));
+const options=['dark','light'].map(type=>`<optgroup label="${type==='dark'?'Dark':'Light'}">`+Object.entries(catalog.themes).filter(([,theme])=>theme.type===type).map(([id])=>`<option value="${id}">${id}</option>`).join('')+'</optgroup>').join('');
+await writeFile('dist/index.html',(await readFile('public/index.html','utf8')).replace('<!-- THEME_OPTIONS -->',options));
+await cp('third_party/base46','dist/licenses/base46',{recursive:true});
+await build({entryPoints:['src/theme-start.js'],bundle:true,minify:true,format:'iife',target:['es2022'],outfile:'dist/theme-start.js'});
 await cp('node_modules/web-tree-sitter/web-tree-sitter.wasm','dist/parsers/web-tree-sitter.wasm');
 await cp('node_modules/web-tree-sitter/LICENSE','dist/parsers/LICENSE-runtime.txt');
 await cp('node_modules/katex/dist/katex.min.css','dist/katex.css');

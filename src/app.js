@@ -1,3 +1,4 @@
+import {currentTheme, saveTheme, forgetTheme} from './theme.js';
 import { VAULTS, selectedVaults, selectSavedVaults, countVaults, cachedNote, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
 import { read, hasKey, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
 import {discoverRepositories, discoverBranches} from './connection.js';
@@ -50,6 +51,9 @@ function filters() {
 }
 function openSettings() {
   cancelDiscovery();
+  $('#theme-select').value=currentTheme();
+  $('#theme-status').textContent='Applies immediately · saved on this device';
+  $('#theme-status').classList.remove('error');
   $('#device-diagnostics').hidden = true; $('#device-diagnostics').textContent = '';
   const connected = !!snapshot && !demo;
   $('#connection-title').textContent = connected ? 'Settings' : 'Connect';
@@ -384,6 +388,17 @@ $('#source-dialog').addEventListener('cancel', event => { event.preventDefault()
 $('#token-input').addEventListener('input', () => { if (discoveryController) cancelDiscovery(); });
 
 $('#settings').onclick = openSettings;
+$('#theme-select').onchange = () => {
+  try {
+    $('#theme-select').value=saveTheme($('#theme-select').value);
+    $('#theme-status').textContent='Theme saved on this device';
+    $('#theme-status').classList.remove('error');
+  } catch (error) {
+    $('#theme-select').value=currentTheme();
+    $('#theme-status').textContent=error.message;
+    $('#theme-status').classList.add('error');
+  }
+};
 $('#diagnose-device').onclick = diagnoseDevice;
 $('#save-vaults').onclick = saveVaultSelection;
 $('#close-settings').onclick = () => { if (!snapshot) return; $('#connection-dialog').close(); $('#token-input').value = ''; };
@@ -412,12 +427,15 @@ $('#reader-content').addEventListener('click', async event => {
   }
 });
 $('#forget').onclick = async () => {
-  if (!confirm('Remove all saved notes, attachments, and the GitHub token from this browser? Your GitHub repository will not be changed.')) return;
+  if (!confirm('Remove all saved notes, attachments, device settings, and the GitHub token from this browser? Your GitHub repository will not be changed.')) return;
   cancelDiscovery();
   controller?.abort(); ++epoch; ++renderVersion;
   try {
-    await clearAll(); revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: '', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
-    $('#connection-dialog').close(); tag = ''; tagOptions(); closeNote(); filters(); status(); toast('This device has been disconnected and cleared.');
+    await clearAll();
+    let themeCleared=true;
+    try { forgetTheme(); } catch { themeCleared=false; }
+    revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: '', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
+    $('#connection-dialog').close(); tag = ''; tagOptions(); closeNote(); filters(); status(); toast(themeCleared ? 'This device has been disconnected and cleared.' : 'Notes and credentials cleared, but the theme preference could not be removed.');
   } catch (error) { toast(error.message); }
 };
 window.addEventListener('hashchange', route);

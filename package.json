@@ -7,7 +7,8 @@
     "build": "node build.mjs",
     "test": "node test/core.test.mjs",
     "preview": "python3 -m http.server 4173 --directory dist --bind 127.0.0.1",
-    "test:browser": "node test/browser.mjs"
+    "test:browser": "node test/browser.mjs",
+    "test:installability": "node test/installability.mjs"
   },
   "dependencies": {
     "dompurify": "^3.3.0",

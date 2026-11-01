@@ -18,6 +18,7 @@ It checks for updates on opening when credentials are available, on reconnect, a
 - Search across titles and full note contents; AND terms and quoted phrases; title-weighted results and snippets.
 - Separate work, personal, cooking, and codex filters.
 - Markdown, YAML titles/tags, relative links, wikilinks, note embeds and heading-section embeds (depth capped at three; cycles blocked).
+- Dark by default, independent of device appearance preference, including browser chrome, install splash colors and app icons.
 - Responsive list/detail reading view, browser back navigation, keyboard `/` search shortcut.
 - A pinned-commit snapshot with incremental blob reuse and atomic IndexedDB replacement. Deleted notes disappear on successful refresh. Failed downloads preserve the last complete snapshot.
 - Offline app shell and full note search. Internal raster images/PDFs download on demand and are cached after viewing (20 MB per attachment limit).
@@ -49,8 +50,10 @@ npm run build
 npm run preview
 # Another terminal, using a headless browser only:
 npm run test:browser
+# Chrome manifest/installability regression, with its own local cookie-gated server:
+npm run test:installability
 ```
 
-Unit tests cover allowlists, parsing, search/ranking, resolution, incremental/deletion behavior, authentication errors and GET-only networking. Browser tests use **synthetic fixtures and fake tokens**, covering phone navigation, section embeds, injection defense, offline reload/search, token opt-in/opt-out, refresh failure recovery, incremental updates, layout bounds and forgetting the device. Captures are written to `/tmp/pocket-vault-qa/`, never into the repository.
+Unit tests cover allowlists, parsing, search/ranking, resolution, incremental/deletion behavior, authentication errors and GET-only networking. Browser tests use **synthetic fixtures and fake tokens**, covering phone navigation, section embeds, injection defense, offline reload/search, token opt-in/opt-out, refresh failure recovery, incremental updates, layout bounds and forgetting the device. Captures are written to `/tmp/pocket-vault-qa/`, never into the repository. `test:installability` starts a real cookie-gated HTTP server and a clean, non-incognito headless Chromium profile, loads the built app, and checks Chrome’s parsed manifest and installability errors. It covers the initial signed-in visit before a service worker can mask manifest-auth failures. The manifest link uses `crossorigin="use-credentials"`, required even on the same origin when the manifest is protected by sign-in. This browser test does not emulate Android’s WebAPK minting service; final installation on the actual phone still requires confirmation.
 
 Source lives in `~/repos/pocket-vault`, separate from the notes repository so the daily vault autosync does not stage an embedded Git repository. Sites identity is retained in `.openai/hosting.json`. Build output is `dist/`; it contains no runtime credentials or note snapshots. The build derives a service-worker cache version from shell content for automatic offline updates.

@@ -27,6 +27,12 @@ await context.route('https://api.github.com/**', async route => {
 });
 try {
   await page.goto('http://127.0.0.1:4173');
+  // The requested default stays dark even when Android/browser prefers light.
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    const theme = await page.evaluate(() => ({ scheme: getComputedStyle(document.documentElement).colorScheme, background: getComputedStyle(document.body).backgroundColor }));
+    check(theme.scheme === 'dark', `dark is the default with ${colorScheme} system preference`);
+  }
   await page.locator('.mobile-connect [data-connect]').click();
   await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-read-only-token');
   await page.getByRole('button', { name: 'Connect & download' }).click();

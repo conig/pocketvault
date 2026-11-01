@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node test/core.test.mjs",
+    "test": "node --test test/core.test.mjs test/discovery.test.mjs",
     "preview": "python3 -m http.server 4173 --directory dist --bind 127.0.0.1",
     "test:browser": "node test/browser.mjs",
     "test:installability": "node test/installability.mjs",
@@ -15,7 +15,8 @@
     "test:cache-recovery": "node test/cache-recovery.mjs",
     "test:startup-retention": "node test/startup-retention.mjs",
     "test:workspace": "node test/workspace.mjs",
-    "test:tags": "node test/tags.mjs"
+    "test:tags": "node test/tags.mjs",
+    "test:privacy": "node test/privacy.mjs"
   },
   "dependencies": {
     "@mdit/plugin-tex": "^1.2.0",

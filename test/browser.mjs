@@ -34,7 +34,7 @@ try {
     check(theme.scheme === 'dark', `dark is the default with ${colorScheme} system preference`);
   }
   await page.locator('.mobile-connect [data-connect]').click();
-  await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-read-only-token');
+  await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-read-only-token');
   await page.locator('#connect-submit').click();
   await page.waitForFunction(() => document.querySelector('#result-count').textContent === '3 notes');
   check(!await page.locator('#notice').isVisible(), 'successful population does not cover the reader with a floating readiness notification');

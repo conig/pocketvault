@@ -7,10 +7,10 @@ const body='# Field notes\n\nTags: #project\n\n## A quieter workspace\n\nKeep **
 const docs=[{path:'work/Field notes.md',sha:'a',text:body},{path:'work/Other.md',sha:'b',text:'# Other\n\nA second note.'}];
 await context.route('https://api.github.com/**',route=>{const url=route.request().url();const value=url.includes('/commits?')?[{sha:'commit',commit:{tree:{sha:'tree'}}}]:url.includes('/git/trees/')?{tree:docs.map(d=>({path:d.path,sha:d.sha,type:'blob',mode:'100644',size:d.text.length}))}:{encoding:'base64',content:Buffer.from(docs.find(d=>url.endsWith('/'+d.sha)).text).toString('base64')};return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});});
 try{
- await page.goto('http://127.0.0.1:4173');await page.locator('#repo-input').waitFor({state:'visible'});
+ await page.goto('http://127.0.0.1:4173');await page.locator('#token-input').waitFor({state:'visible'});await page.locator('#manual-connection').evaluate(node => node.open = true);
  assert.equal(await page.locator('.workspace').isVisible(),false);assert.equal(await page.locator('.topbar').isVisible(),false);
  await page.screenshot({path:'/tmp/pocket-setup.png'});
- await page.locator('#repo-input').fill('fixture/notes');await page.locator('#token-input').fill('fake-token');await page.locator('#remember-token').check();await page.locator('#connect-submit').click();await page.locator('.note-row').first().waitFor();
+ await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('fixture/notes');await page.locator('#token-input').fill('fake-token');await page.locator('#remember-token').check();await page.locator('#connect-submit').click();await page.locator('.note-row').first().waitFor();
  assert.equal(await page.locator('#connection-dialog').isVisible(),false);assert.equal(await page.locator('.welcome').count(),0);
  await page.screenshot({path:'/tmp/pocket-library.png'});
  await page.locator('#search').fill('second');assert.equal(await page.locator('.note-row').count(),1);await page.locator('#search').fill('');

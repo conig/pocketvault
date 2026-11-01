@@ -99,8 +99,11 @@ export function resolveFile(target, from, files) {
   return match ? { path: match.path, anchor } : null;
 }
 export function bytesFromBase64(content) { return Uint8Array.from(atob(content.replace(/\s/g, '')), c => c.charCodeAt(0)); }
-export async function github(repo, endpoint, token, { signal, fetcher = fetch } = {}) {
-  const res = await fetcher(`https://api.github.com/repos/${repo}/${endpoint}`, {
+export function github(repo, endpoint, token, options) {
+  return githubRequest(`repos/${repo}/${endpoint}`, token, options);
+}
+export async function githubRequest(path, token, { signal, fetcher = fetch } = {}) {
+  const res = await fetcher(`https://api.github.com/${path}`, {
     method: 'GET', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error', signal,
     headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
   });

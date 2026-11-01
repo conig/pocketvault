@@ -1,12 +1,13 @@
 import { VAULTS, selectedVaults, selectSavedVaults, countVaults, cachedNote, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
 import { read, hasKey, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
+import {discoverRepositories, discoverBranches} from './connection.js';
 const renderer = () => import('./render.js');
 // Recovery is a one-shot launch action, not a permanent network requirement.
 const launchURL = new URL(location.href);
 if (launchURL.searchParams.has('recover')) { launchURL.searchParams.delete('recover'); history.replaceState(null, '', launchURL.pathname + launchURL.search + launchURL.hash); }
 const $ = selector => document.querySelector(selector);
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
-let snapshot = null, config = { repo: 'user/vault', branch: '' }, token = '', remembered = false;
+let snapshot = null, config = { repo: '', branch: '' }, token = '', remembered = false;
 let vault = 'all', selected = '', busy = false, demo = false, controller, noticeTimer, epoch = 0, renderVersion = 0;
 const urls = new Map();
 const hadController = !!navigator.serviceWorker?.controller;
@@ -48,6 +49,7 @@ function filters() {
   }
 }
 function openSettings() {
+  cancelDiscovery();
   $('#device-diagnostics').hidden = true; $('#device-diagnostics').textContent = '';
   const connected = !!snapshot && !demo;
   $('#connection-title').textContent = connected ? 'Settings' : 'Connect';
@@ -67,6 +69,7 @@ function openSettings() {
       label.append(checkbox, el('span', '', name), el('small', '', `${count} ${count === 1 ? 'note' : 'notes'}`)); options.append(label);
     }
   }
+  $('#manual-connection').open = !!config.repo;
   $('#repo-input').value = config.repo;
   $('#branch-input').value = config.branch;
   $('#token-input').value = token;
@@ -290,11 +293,96 @@ function loadDemo() {
   demo = true; tagOptions(); filters(); drawList(); status(); welcome();
   if (matchMedia('(min-width: 761px)').matches) showNote(snapshot.notes[0].path);
 }
-$('#connection-form').addEventListener('submit', event => {
+let discoveryController, pendingConnection, branchVersion = 0;
+function cancelDiscovery() {
+  discoveryController?.abort(); discoveryController = null; pendingConnection = null; ++branchVersion;
+  $('#repo-select').replaceChildren(); $('#branch-select').replaceChildren();
+  $('#discovery-status').hidden = true; $('#connect-submit').disabled = busy;
+  if ($('#source-dialog').open) $('#source-dialog').close();
+}
+function option(value, text = value) { const node = el('option', '', text); node.value = value; return node; }
+async function sourceBranches() {
+  const version = ++branchVersion, pending = pendingConnection;
+  $('#branch-select').replaceChildren(); $('#source-submit').disabled = true; $('#source-error').hidden = true;
+  $('#source-status').textContent = 'Loading branches…';
+  try {
+    const info = await discoverBranches($('#repo-select').value, pending.token, {signal:discoveryController.signal});
+    if (version !== branchVersion) return null;
+    if (!info.branches.length) throw new Error('This repository has no readable branches. Choose another repository.');
+    for (const name of info.branches) $('#branch-select').append(option(name === info.defaultBranch ? '' : name, name + (name === info.defaultBranch ? ' (default)' : '')));
+    $('#branch-select').value = info.branches.includes(pending.branch) && pending.branch !== info.defaultBranch ? pending.branch : '';
+    // An empty selection value deliberately tracks the repository default.
+    if ($('#branch-select').selectedIndex < 0) $('#branch-select').selectedIndex = 0;
+    $('#source-status').textContent = 'Choose a repository and branch, then open your vault.';
+    $('#source-submit').disabled = false;
+    return info;
+  } catch (error) {
+    if (version === branchVersion && error.name !== 'AbortError') {
+      $('#source-status').textContent = '';
+      $('#source-error').textContent = error.message + ' Go back to enter the repository and branch manually.'; $('#source-error').hidden = false;
+    }
+    return null;
+  }
+}
+async function connectSource(repo, branch) {
+  const pending = pendingConnection, current = discoveryController;
+  if (!pending || busy) return;
+  const next = {repo, branch, authRequired:!!pending.token, vaults:selectedVaults(config.vaults)};
+  const choosing = $('#source-dialog').open;
+  for (const id of ['#source-submit', '#source-back', '#repo-select', '#branch-select']) $(id).disabled = true;
+  $('#source-status').textContent = 'Opening vault…'; $('#source-error').hidden = true;
+  await refresh(next, pending.token, pending.remember);
+  if (current !== discoveryController) return;
+  if (config === next || !choosing) cancelDiscovery();
+  else {
+    $('#source-error').textContent = $('#connection-error').textContent; $('#source-error').hidden = false;
+    $('#source-status').textContent = 'Your saved library is unchanged. Try again or choose another source.';
+  }
+  for (const id of ['#source-submit', '#source-back', '#repo-select', '#branch-select']) $(id).disabled = false;
+}
+$('#connection-form').addEventListener('submit', async event => {
   event.preventDefault();
-  try { const next = { repo: repository($('#repo-input').value), branch: $('#branch-input').value.trim(), authRequired: !!$('#token-input').value.trim(), vaults: selectedVaults(config.vaults) }; refresh(next, $('#token-input').value.trim(), $('#remember-token').checked); }
-  catch (error) { $('#connection-error').textContent = error.message; $('#connection-error').hidden = false; }
+  if (busy || discoveryController) return;
+  const nextToken = $('#token-input').value.trim();
+  const manualRepo = $('#repo-input').value.trim();
+  if (manualRepo) {
+    // Explicit manual entry is also the recovery path for discovery failures.
+    try { const next = {repo:repository(manualRepo), branch:$('#branch-input').value.trim(), authRequired:!!nextToken, vaults:selectedVaults(config.vaults)}; refresh(next, nextToken, $('#remember-token').checked); }
+    catch (error) { settingsError(error.message); }
+    return;
+  }
+  discoveryController = new AbortController();
+  const current = discoveryController;
+  pendingConnection = {token:nextToken, remember:$('#remember-token').checked, branch:''};
+  $('#connect-submit').disabled = true; $('#connection-error').hidden = true;
+  $('#discovery-status').textContent = 'Finding repositories…'; $('#discovery-status').hidden = false;
+  try {
+    const repos = await discoverRepositories(nextToken, {signal:current.signal});
+    if (current !== discoveryController) return;
+    if (!repos.length) throw new Error('No accessible repositories found. Check token access or enter a repository manually.');
+    $('#repo-select').replaceChildren(...repos.map(repo => option(repo)));
+    // Load branches before deciding whether a choice is necessary; otherwise a
+    // single repo with multiple branches could incorrectly skip the chooser.
+    const info = await sourceBranches();
+    if (current !== discoveryController) return;
+    if (repos.length === 1 && info?.branches.length === 1) { connectSource(repos[0], ''); return; }
+    $('#connection-dialog').close(); $('#source-dialog').showModal();
+  } catch (error) {
+    if (current === discoveryController) { cancelDiscovery(); settingsError(error.message); }
+  } finally {
+    if (current === discoveryController) { $('#discovery-status').hidden = true; $('#connect-submit').disabled = false; }
+  }
 });
+$('#repo-select').onchange = sourceBranches;
+$('#source-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!$('#source-submit').disabled) connectSource($('#repo-select').value, $('#branch-select').value);
+});
+function backToConnection() { cancelDiscovery(); $('#connection-dialog').showModal(); }
+$('#source-back').onclick = backToConnection;
+$('#source-dialog').addEventListener('cancel', event => { event.preventDefault(); if (!busy) backToConnection(); });
+$('#token-input').addEventListener('input', () => { if (discoveryController) cancelDiscovery(); });
+
 $('#settings').onclick = openSettings;
 $('#diagnose-device').onclick = diagnoseDevice;
 $('#save-vaults').onclick = saveVaultSelection;
@@ -325,9 +413,10 @@ $('#reader-content').addEventListener('click', async event => {
 });
 $('#forget').onclick = async () => {
   if (!confirm('Remove all saved notes, attachments, and the GitHub token from this browser? Your GitHub repository will not be changed.')) return;
+  cancelDiscovery();
   controller?.abort(); ++epoch; ++renderVersion;
   try {
-    await clearAll(); revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: 'user/vault', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
+    await clearAll(); revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: '', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
     $('#connection-dialog').close(); tag = ''; tagOptions(); closeNote(); filters(); status(); toast('This device has been disconnected and cleared.');
   } catch (error) { toast(error.message); }
 };

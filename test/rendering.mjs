@@ -16,7 +16,7 @@ async function verifyFonts(selectors) {
  }
 }
 try{
- await page.goto('http://127.0.0.1:4173');await page.locator('.mobile-connect [data-connect]').click();await page.locator('#repo-input').fill('fixture/notes');await page.locator('#connect-submit').click();await page.waitForSelector('.note-row');
+ await page.goto('http://127.0.0.1:4173');await page.locator('.mobile-connect [data-connect]').click();await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('fixture/notes');await page.locator('#connect-submit').click();await page.waitForSelector('.note-row');
  const rowTitle=await page.locator('.note-row h2').innerText();console.log(JSON.stringify({rowTitle}));
  assert.equal(rowTitle,'Useful human title','Human aliases must take precedence over generated IDs.');
  assert.ok((await page.locator('.row-tags').innerText()).includes('#System-Setup'));

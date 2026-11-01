@@ -36,7 +36,7 @@ async function expectResults(titles) {
 }
 try {
   await page.goto(origin);
-  await page.locator('#repo-input').fill('fixture/notes');
+  await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('fixture/notes');
   await page.locator('#connect-submit').click();
   await page.waitForFunction(() => document.querySelectorAll('.note-row').length === 5);
   for (const width of [390, 1360]) {

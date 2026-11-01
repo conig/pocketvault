@@ -39,7 +39,7 @@ async function saved() {
 try {
  await page.goto('http://127.0.0.1:4173'); await page.locator('.mobile-connect [data-connect]').click();
  check(!await page.locator('#vault-settings').isVisible(), 'vault settings appear only after connection');
- await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-token'); await page.locator('#connect-submit').click();
+ await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-token'); await page.locator('#connect-submit').click();
  await page.waitForFunction(() => document.querySelector('#result-count').textContent === '4 notes');
  // Cache an attachment from each vault so exclusion must physically remove it.
  for (const path of ['cooking/Recipe.md', 'work/Project.md']) {

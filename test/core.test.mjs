@@ -16,7 +16,7 @@ function mock(routes) {
   return { fetcher, calls };
 }
 const base = { 'commits?per_page=1': [commit()], [`git/trees/${treeSha}?recursive=1`]: { tree: [file('work/Note.md')] }, 'git/blobs/file1': { encoding: 'base64', content: Buffer.from('# Note\nHello world.').toString('base64') } };
-test('repository names are constrained to GitHub owner/repository, including this vault name', () => {
+test('repository names are constrained to GitHub owner/repository, including a full GitHub URL', () => {
   assert.equal(repository('https://github.com/user/vault.git'), 'user/vault');
   for (const value of ['../x/y', 'https://evil.example/x/y', 'a/b?x=1', 'a/b/c']) assert.throws(() => repository(value));
 });

@@ -29,11 +29,14 @@
 </section>
 <details id="connection-details" open><summary>GitHub connection</summary>
 
-<label>Repository<input name="repo" id="repo-input" placeholder="owner/repository" required autocomplete="off" spellcheck="false"></label>
-<label>Branch <span class="optional">optional</span><input name="branch" id="branch-input" placeholder="Default branch" autocomplete="off" spellcheck="false"></label>
 <label>Read-only GitHub token <a class="token-help" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" title="Create a fine-grained token with Contents: read-only">Create ↗</a><input name="token" id="token-input" type="password" autocomplete="off" placeholder="github_pat_…" spellcheck="false"></label>
 
 <label class="checkbox"><input type="checkbox" id="remember-token"><span>Remember token <small>Unencrypted · this device only</small></span></label>
+<details id="manual-connection"><summary>Enter a repository manually</summary>
+<label>Repository<input name="repo" id="repo-input" placeholder="user/vault" autocomplete="off" spellcheck="false"></label>
+<label>Branch <span class="optional">optional</span><input name="branch" id="branch-input" placeholder="Default branch" autocomplete="off" spellcheck="false"></label>
+</details>
+<p id="discovery-status" role="status" hidden></p>
 <button class="primary" id="connect-submit" type="submit">Connect <span>↗</span></button>
 </details>
 
@@ -41,6 +44,16 @@
 <details><summary>Device cache & connection</summary><button type="button" class="primary" id="diagnose-device">Check device cache & GitHub</button><pre id="device-diagnostics" role="status" hidden></pre></details>
 <button type="button" class="text-button danger" id="forget">Forget this device</button>
 
+</form></dialog>
+<dialog id="source-dialog" aria-labelledby="source-title">
+<form id="source-form">
+<div class="dialog-top"><span class="eyebrow">GITHUB SOURCE</span><button type="button" id="source-back" class="icon-button" aria-label="Back to connection">←</button></div>
+<h2 id="source-title">Choose your source</h2>
+<label>Repository<select id="repo-select" required></select></label>
+<label>Branch<select id="branch-select"></select></label>
+<p id="source-status" role="status"></p>
+<p id="source-error" class="error" role="alert" hidden></p>
+<button class="primary" id="source-submit" type="submit">Open vault <span>↗</span></button>
 </form></dialog>
 <script type="module" src="/app.js"></script>
 </body></html>

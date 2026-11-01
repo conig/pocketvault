@@ -4,8 +4,8 @@ A small, read-only, installable web app for the existing GitHub-backed Markdown 
 
 ## Use on Android
 
-1. Open the privately deployed Site and sign in as its owner.
-2. Tap **Connect GitHub**. The repository name is prefilled; leave Branch blank for the repository default.
+1. Open the deployed Site. Its public app shell contains no private notes or credentials.
+2. Enter your read-only GitHub token, choose whether to remember it, then tap **Connect**. A single accessible repository with one branch opens directly. Otherwise a second setup dialog offers repository and branch dropdowns together, with the default branch selected. Switch repositories to reload its branches. No third popup is needed. For public repositories or discovery failures, expand **Enter a repository manually** (`user/vault` is only an example); a blank Branch uses the repository default. No personal repository is bundled or prefilled.
 3. For the private vault repository, create a **fine-grained personal access token** at GitHub → Settings → Developer settings → Personal access tokens. Grant access to **only the notes repository**, with **Contents: Read-only** (Metadata read is automatic). Do not use a classic broad-scope token. Paste the token into the app, not into chat.
 4. Optionally select **Remember token on this device** on your own trusted phone. Without this opt-in, credentials live only in page memory; offline notes still work, but a later session needs the token again to refresh.
 5. Connect and keep the screen awake through the initial download. Subsequent refreshes fetch only changed Markdown blobs.
@@ -90,3 +90,7 @@ Successful repair removes the one-shot `recover` query flag from the current URL
 ## Focused source workspace
 
 Setup occupies its own screen until a snapshot exists. Connected users see only the library and reader; settings and filters are on demand. NvChad One Dark-inspired panes use self-hosted JetBrains Mono. Source reading preserves Markdown headings, emphasis delimiters, list markers, fences, tables and spacing, with coloured syntax and concealed clickable link destinations. No generated article title, reading-time block, explanatory welcome, or persistent offline notice. Raw HTML remains inert. Source paints immediately using the existing parser, then a lazy Tree-sitter Markdown parser adds structural highlighting. Runtime and canonical v0.5.4 grammar are self-hosted and cached offline; neither delays the library or initial source paint. CSP permits WebAssembly compilation only, not JavaScript eval. Source mode intentionally shows math, tables and embed notation rather than typesetting them. The existing rich renderer remains available internally for regression coverage.
+
+## Connection discovery and privacy
+
+Repository discovery uses paginated, authenticated GitHub GET requests directly from the browser (`/user/repos`). The token needs repository Metadata: read (included with fine-grained PATs) and Contents: read for notes and branches. Discovery may include public repositories; it does not infer or widen token permissions. No discovered names are saved until a successful connection, and only the selected repository/branch is stored with the existing local snapshot. Tokens remain in memory unless **Remember token** is checked; that choice is applied only after a successful connection. Cancelling or failed discovery preserves the previous library and credentials. A manual repository/branch remains available if GitHub discovery is unavailable. **Forget this device** restores blank connection fields, never another person’s repository.

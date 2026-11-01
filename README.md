@@ -2,6 +2,12 @@
 
 A small, read-only, installable web app for the existing GitHub-backed Markdown vaults. No Git working copy, editor, push operation, or server-side note database.
 
+## Demo
+
+![Pocket Vault on mobile: full-text search, linked-note navigation, and tag filtering.](docs/demo.gif)
+
+Recorded with synthetic notes; no private vault content or real credentials.
+
 ## Use on Android
 
 1. Open the deployed Site. Its public app shell contains no private notes or credentials.

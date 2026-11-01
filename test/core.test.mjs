@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VAULTS, selectedVaults, selectSavedVaults, allowedPath, repository, parseNote, searchNotes, snippet, resolveFile, fetchSnapshot, github } from '../src/core.js';
+import { cachedNote, VAULTS, selectedVaults, selectSavedVaults, allowedPath, repository, parseNote, searchNotes, snippet, resolveFile, fetchSnapshot, github } from '../src/core.js';
 const sha = 'a'.repeat(40), treeSha = 'b'.repeat(40);
 const commit = (value = sha) => ({ sha: value, commit: { tree: { sha: treeSha } } });
 const file = (path, sha = 'file1') => ({ path, sha, type: 'blob', mode: '100644', size: 30 });
@@ -139,4 +139,23 @@ test('a selected empty vault is valid and keeps available-vault counts for setti
   const snap = await fetchSnapshot({ repo: 'owner/notes', branch: '', vaults: ['cooking'] }, '', null, { fetcher });
   assert.equal(snap.notes.length, 0); assert.equal(snap.vaultCounts.work, 1);
   assert.equal(calls.length, 2);
+});
+
+test('human aliases and tags take priority over timestamp identifiers', () => {
+  const note = parseNote('work/1770000000-project-plan.md', '---\nid: 1770000000-project-plan\naliases: [Project plan]\ntags: [work, project/alpha]\n---\n# 1770000000-project-plan\n\nTags: `System-Setup`, `work`\n\nAn #idea.\n\n```text\n#not-a-tag\n```');
+  assert.equal(note.title, 'Project plan');
+  assert.deepEqual(note.tags, ['work','project/alpha','System-Setup','idea']);
+  assert.ok(!note.plain.includes('1770000000'));
+  assert.equal(searchNotes([note], '#project').length, 1);
+  assert.equal(searchNotes([note], '', 'all', 'system-setup').length, 1);
+  assert.equal(searchNotes([note], '#missing').length, 0);
+});
+test('old cached notes remain usable immediately without pretending frontmatter was recovered', () => {
+  const migrated = cachedNote({ path:'work/1770000000-project-plan.md', title:'1770000000-project-plan', body:'# 1770000000-project-plan\n\nTags: `work`\n\nReference', tags:[], sha:'old', vault:'work' });
+  assert.equal(migrated.title,'project plan'); assert.deepEqual(migrated.tags,['work']); assert.equal(migrated.formatVersion,0);
+});
+test('useful metadata is compact and generated identifiers do not become title fallbacks', () => {
+  const n = parseNote('cooking/1770000000-lemon-pasta.md','---\ntitle: Lemon pasta\ndate: 2026-11-02\nserves: 2\nprep: 10 min\nrating: 92\n---\nA quick dinner.');
+  assert.equal(n.title,'Lemon pasta'); assert.equal(n.date,'2026-11-02'); assert.equal(n.minutes,1); assert.equal(n.facts.length,3);
+  assert.equal(parseNote('work/1770000000-project-plan.md','# 1770000000-project-plan').title,'project plan');
 });

@@ -9,12 +9,20 @@
     "preview": "python3 -m http.server 4173 --directory dist --bind 127.0.0.1",
     "test:browser": "node test/browser.mjs",
     "test:installability": "node test/installability.mjs",
-    "test:vaults": "node test/vaults.mjs"
+    "test:vaults": "node test/vaults.mjs",
+    "test:performance": "node test/performance.mjs",
+    "test:rendering": "node test/rendering.mjs"
   },
   "dependencies": {
     "dompurify": "^3.3.0",
-    "markdown-it": "^14.1.0",
-    "yaml": "^2.8.1"
+    "markdown-it": "^15.0.3",
+    "yaml": "^2.8.1",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "markdown-it-mark": "^4.0.0",
+    "katex": "^0.19.1",
+    "highlight.js": "^11.11.0",
+    "@mdit/plugin-tex": "^1.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

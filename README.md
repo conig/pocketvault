@@ -15,13 +15,15 @@ It checks for updates on opening when credentials are available, on reconnect, a
 
 ## Included
 
-- Search across titles and full note contents; AND terms and quoted phrases; title-weighted results and snippets.
+- Search across human titles, aliases and full note contents; AND terms and quoted phrases; title-weighted results and snippets. YAML `title` / human aliases outrank generated identifiers. Timestamp IDs are not prominent headings; source paths are collapsed under Source details.
+- Tags extracted from YAML, plain `Tags:` lines and inline hashtags, displayed in both list and reader. Filter by tag or search `#tag` (including hierarchical tags). Compact date, reading time and recipe facts appear when available.
 - **Settings → Vaults on this device** after connection: choose work, personal, cooking, and/or codex, then **Save vault selection**. Choices persist per device and control downloads, full-text search and navigation filters. At least one vault must stay selected.
 - Removing vaults works offline and atomically deletes their saved notes, file names and unreferenced attachments; GitHub is never changed. Adding vaults downloads only their missing notes, even when the GitHub commit has not changed; it requires network/GitHub access. Failed downloads retain the previous complete selection. Closing Settings without saving discards edits. Existing installs default to all four vaults. Only per-vault note counts are retained for excluded vaults.
 - Separate filters for selected vaults.
-- Markdown, YAML titles/tags, relative links, wikilinks, note embeds and heading-section embeds (depth capped at three; cycles blocked).
-- Dark by default, independent of device appearance preference, including browser chrome, install splash colors and app icons.
+- Markdown tables with alignment, lists, read-only tasks, fenced code with syntax highlighting, footnotes and navigation, callouts (including folds), highlights, safe HTML (such as details/summary/br), dollar/bracket/fenced TeX math, relative links, aliases, wikilinks, and note/heading embeds. Embeds cap depth at three and block cycles. Untrusted HTML is sanitized; executable HTML and raw styling are deliberately not supported.
+- Dark-terminal presentation with bundled JetBrains Mono (regular/bold), compact titles and visible tags; dark regardless of device preference. Fonts, code/math modules and KaTeX assets are self-hosted and offline-cached. No font CDN.
 - Responsive list/detail reading view, browser back navigation, keyboard `/` search shortcut.
+- Cached-first installed launch: hosting/auth latency does not block saved notes; first display paints a bounded 50-note page with Show more, while search includes the entire library. Rendering/math/code modules load lazily, background refresh yields until the cached view is ready, and unchanged checks do not rewrite/redraw the library.
 - A pinned-commit snapshot with incremental blob reuse and atomic IndexedDB replacement. Deleted notes disappear on successful refresh. Failed downloads preserve the last complete snapshot.
 - Offline app shell and full note search. Internal raster images/PDFs download on demand and are cached after viewing (20 MB per attachment limit).
 - **Forget this device** clears notes, attachments, configuration and any remembered token, but never touches GitHub. Only the non-sensitive app shell remains cached.
@@ -29,17 +31,17 @@ It checks for updates on opening when credentials are available, on reconnect, a
 
 ## Privacy / security model
 
-- All repository requests are GETs directly to `https://api.github.com`. No GitHub token or note contents are sent to the Site host. No analytics, third-party JS/CDNs, remote fonts, or backend API.
+- All repository requests are GETs directly to `https://api.github.com`. No GitHub token or note contents are sent to the Site host. No analytics, third-party JS/CDNs, remotely loaded fonts, or backend API.
 - Repository name is an editable default, not a credential. No private vault content is bundled, tested against, or published with the application.
 - Tokens are **not validated for read-only scope by the app**: enforce this when creating the fine-grained token. Even if a broader token is entered, the app only implements read requests. HTTPS and repository-scoped tokens are required for private deployment.
 - Optional remembered tokens and cached notes are browser-local **not encrypted at rest by this app**. Treat them like other downloaded personal files; use a trusted, screen-locked device. Hosting authentication protects online access, not an already downloaded offline cache. Browser extensions or compromised same-origin app code can access browser storage. Revoke expired/unneeded tokens in GitHub.
 - Hidden paths, symlinks and all folders outside the explicit vault allowlist are excluded. This is not content-level secret scanning: a sensitive value in an included Markdown note is still downloaded.
-- Raw HTML is disabled in Markdown; output is sanitized with DOMPurify. A restrictive CSP blocks third-party scripts/images. External images are omitted to prevent tracking. External links open explicitly with no referrer or opener.
+- Markdown HTML is sanitized with DOMPurify (HTML-only profile, prefixed IDs, no scripts/forms/style attributes). Raw inputs are removed except disabled task checkboxes. Only trusted KaTeX output may use inline style attributes after sanitization, with trust disabled and expansion/size limits. A restrictive CSP blocks third-party scripts/images. External images are omitted to prevent tracking. External links open explicitly with no referrer or opener.
 - Client storage is not backup. The existing GitHub backup process remains unchanged.
 
 ## Limitations
 
-Not a complete Obsidian runtime: no Dataview, plugins, canvas, LaTeX rendering, live queries, block-level rich embeds or SVG attachment rendering. Ambiguous wiki basenames are not guessed. Block references have only basic single-line embed support. Assets are offline only after viewing; notes are all cached. GitHub API rate/size limits apply: 2 MB per note, 20 MB per supported attachment, and recursive trees must not be truncated. Interrupted first downloads require retrying. Service-worker installation/offline behavior through the production sign-in gateway must be checked on the actual phone.
+Not a complete Obsidian runtime: no Dataview, plugins, canvas, live queries, Mermaid or SVG attachment rendering. TeX math is supported through KaTeX, not a full LaTeX document engine. Ambiguous wiki basenames are not guessed. Block references support paragraph embeds; complex Obsidian block semantics are not guaranteed. Note attachments are offline only after viewing; selected notes and renderer/font assets are cached. A one-time background metadata refresh re-downloads legacy note blobs to recover aliases/frontmatter discarded by the old parser; old caches remain usable immediately without waiting. GitHub API rate/size limits apply: 2 MB per note, 20 MB per supported attachment, and recursive trees must not be truncated. Interrupted first downloads require retrying. Service-worker installation/offline behavior through the production sign-in gateway must be checked on the actual phone.
 
 ## Development
 
@@ -56,8 +58,18 @@ npm run test:browser
 npm run test:installability
 # With the preview running, test connected vault selection:
 npm run test:vaults
+npm run test:rendering
+npm run test:performance
 ```
 
 Unit tests cover allowlists, parsing, search/ranking, resolution, incremental/deletion behavior, authentication errors and GET-only networking. Browser tests use **synthetic fixtures and fake tokens**, covering phone navigation, section embeds, injection defense, offline reload/search, token opt-in/opt-out, refresh failure recovery, incremental updates, layout bounds and forgetting the device. Captures are written to `/tmp/pocket-vault-qa/`, never into the repository. `test:installability` starts a real cookie-gated HTTP server and a clean, non-incognito headless Chromium profile, loads the built app, and checks Chrome’s parsed manifest and installability errors. It covers the initial signed-in visit before a service worker can mask manifest-auth failures. The manifest link uses `crossorigin="use-credentials"`, required even on the same origin when the manifest is protected by sign-in. This browser test does not emulate Android’s WebAPK minting service; final installation on the actual phone still requires confirmation.
 
 Source lives in `~/repos/pocket-vault`, separate from the notes repository so the daily vault autosync does not stage an embedded Git repository. Sites identity is retained in `.openai/hosting.json`. Build output is `dist/`; it contains no runtime credentials or note snapshots. The build derives a service-worker cache version from shell content for automatic offline updates.
+
+## Startup and rendering verification
+
+`test:performance` uses a real worker/IndexedDB/HTTP server, 532 synthetic notes (~2.8 MB), 4× CPU throttling and a 1.8 s hosting-navigation delay. The original network-first build measured 2452 ms and failed its <1300 ms cached-launch budget. The cached-first/bounded-render build measured 437–443 ms in the same harness; full-library search was 63–69 ms. These are reproducible lab measurements, not a claim about every phone or first-time install.
+
+`test:rendering` originally failed because a generated ID won over a human alias. It now verifies human titles, all three tag formats, tag filtering, tables/alignment, tasks, footnotes/scrolling, callouts, highlights, code syntax, safe HTML/XSS defense, math and offline font/math availability. Existing offline, selection and cookie-gated installation suites also run. Unicode/CommonMark support is provided by Markdown-it; no claim of compatibility with every Obsidian plugin or arbitrary HTML/LaTeX is made.
+
+Service-worker navigation is cache-first after installation. As before, the online sign-in gate is **not** a lock on downloaded notes. Updates cache a complete new shell; one previous immutable chunk set stays available for open older tabs. A Reload update control appears when a new worker takes control. No private notes are added to the shell cache or app deployment.

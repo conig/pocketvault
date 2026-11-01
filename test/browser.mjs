@@ -79,7 +79,9 @@ try {
   await page.waitForFunction(() => !document.querySelector('#connection-dialog').open);
   check(await page.evaluate(async () => { const db = await new Promise(resolve => { const r = indexedDB.open('pocket-vault'); r.onsuccess = () => resolve(r.result); }); return new Promise(resolve => { const r = db.transaction('data').objectStore('data').get('credential'); r.onsuccess = () => resolve(r.result === 'test-read-only-token'); }); }), 'remember-token opt-in persists only on this browser');
   const callsBeforeReload = requests.length;
+  const openingRefresh = page.waitForRequest(r => r.url().includes('api.github.com') && r.url().includes('/commits'));
   await page.reload();
+  await openingRefresh;
   await page.waitForFunction(() => document.querySelector('#result-count').textContent === '3 notes' && !document.querySelector('#refresh').disabled);
   check(requests.length > callsBeforeReload, 'remembered credentials refresh the saved snapshot on opening');
   generation = 2; const before = requests.length;

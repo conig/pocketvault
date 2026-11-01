@@ -1,11 +1,23 @@
-import { VAULTS, selectedVaults, selectSavedVaults, countVaults, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
-import { read, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
-import { renderMarkdown, decorate } from './render.js';
+import { VAULTS, selectedVaults, selectSavedVaults, countVaults, cachedNote, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
+import { read, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
+const renderer = () => import('./render.js');
 const $ = selector => document.querySelector(selector);
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
 let snapshot = null, config = { repo: 'user/vault', branch: '' }, token = '', remembered = false;
 let vault = 'all', selected = '', busy = false, demo = false, controller, noticeTimer, epoch = 0, renderVersion = 0;
 const urls = new Map();
+const hadController = !!navigator.serviceWorker?.controller;
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) $('#apply-update').hidden = false; });
+$('#apply-update').onclick = () => location.reload();
+let tag = '', listLimit = 50;
+function tagOptions() {
+  const select = $('#tag-filter'), counts = new Map();
+  for (const note of snapshot?.notes || []) for (const value of note.tags) counts.set(value,(counts.get(value)||0)+1);
+  if (!counts.has(tag)) tag = '';
+  select.replaceChildren(new Option('All tags', ''));
+  for (const [value,count] of [...counts].sort(([a],[b])=>a.localeCompare(b))) select.append(new Option(`#${value} (${count})`,value));
+  select.value = tag; select.disabled = !counts.size;
+}
 function toast(message, timeout = 6500) { $('#notice').textContent = message; $('#notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, timeout); }
 function revokeAssets() { for (const url of urls.values()) URL.revokeObjectURL(url); urls.clear(); }
 function status() {
@@ -84,20 +96,21 @@ function welcome() {
   const root = $('#reader-content'); root.replaceChildren();
   const block = el('div', 'welcome');
   if (snapshot) {
-    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">SPACE TO THINK</div><h2>Your notes.<br>A little more accessible.</h2><p>Choose a note or search your library. Everything here is ready to read, even offline.</p><div class="welcome-foot">READ ONLY · NO INBOX · NO DISTRACTIONS</div>';
+    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">~/vaults</div><h2>Select a note.</h2><p>Choose a note or search your library. Everything here is ready to read, even offline.</p><div class="welcome-foot">/ to search · #tag to filter · read only</div>';
   } else {
-    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>A quiet place<br>for everything you know.</h2><p>Find a recipe, revisit an idea, look up that thing you wrote down. Your notes, without the editing tools.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button><div class="welcome-foot">PRIVATE BY DESIGN<br>Read-only GitHub access. Search and read offline.</div>';
+    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>Open your vaults.</h2><p>Find a recipe, revisit an idea, look up that thing you wrote down. Your notes, without the editing tools.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button><div class="welcome-foot">PRIVATE BY DESIGN<br>Read-only GitHub access. Search and read offline.</div>';
   }
   root.append(block); connectionActions(block);
 }
-function drawList() {
+function drawList({ preserveLimit = false } = {}) {
+  if (!preserveLimit) listLimit = 50;
   const list = $('#note-list'); list.replaceChildren();
   $('#demo-badge').hidden = !demo;
-  const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault) : [];
+  const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault, tag) : [];
   $('#result-count').textContent = snapshot ? `${notes.length.toLocaleString()} ${notes.length === 1 ? 'note' : 'notes'}${$('#search').value ? ' found' : ''}` : 'Your notes live here';
   if (!snapshot) {
     const empty = el('div', 'mobile-connect');
-    empty.innerHTML = '<div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>A quiet place for everything you know.</h2><p>Your GitHub notes, ready to read and search. No editing tools. No extra sync service.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button>';
+    empty.innerHTML = '<div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>Open your vaults.</h2><p>Your GitHub notes, ready to read and search. No editing tools. No extra sync service.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button>';
     list.append(empty); connectionActions(empty);
     const desktop = el('div', 'empty-list empty-library-desktop'); desktop.innerHTML = '<strong>Four vaults. One search.</strong>Connect your repository to bring your notes here.'; list.append(desktop);
     return;
@@ -106,15 +119,22 @@ function drawList() {
     const empty = el('div', 'empty-list'); empty.append(el('strong', '', 'Nothing here just yet.'), el('span', '', 'Try another word or choose All vaults. Search looks through titles and note contents.')); list.append(empty); return;
   }
   const fragment = document.createDocumentFragment();
-  for (const note of notes) {
+  for (const note of notes.slice(0, listLimit)) {
     const row = el('button', `note-row${selected === note.path ? ' selected' : ''}`); row.type = 'button'; row.dataset.path = note.path;
     if (selected === note.path) row.setAttribute('aria-current', 'page');
     const meta = el('span', 'row-meta'); meta.append(el('span', '', note.vault), el('span', 'row-arrow', '↗'));
-    row.append(meta, el('h2', '', note.title), el('p', '', snippet(note, $('#search').value)));
+    row.append(el('h2', '', note.title));
+    if (note.tags.length) row.append(el('span', 'row-tags', note.tags.map(t=>'#'+t).join(' ')));
+    row.append(el('p', '', snippet(note, $('#search').value)), meta);
+    if (note.date) meta.append(el('span', '', note.date));
     row.onclick = () => navigate(note.path);
     fragment.append(row);
   }
   list.append(fragment);
+  if (notes.length > listLimit) {
+    const more = el('button', 'load-more', `Show more · ${notes.length-listLimit} remaining`);
+    more.type = 'button'; more.onclick = () => { listLimit += 50; drawList({preserveLimit:true}); }; list.append(more);
+  }
 }
 async function assetURL(path) {
   const assetEpoch = epoch;
@@ -153,20 +173,25 @@ async function showNote(path, anchor = '') {
   const note = snapshot?.notes.find(n => n.path === path);
   if (!note) { toast('That note is not in the saved library.'); return; }
   const version = ++renderVersion;
-  selected = path; drawList(); $('.workspace').classList.add('note-open');
+  const { renderMarkdown, decorate } = await renderer();
+  if (version !== renderVersion) return;
+  selected = path; drawList({preserveLimit:true}); $('.workspace').classList.add('note-open');
   const root = $('#reader-content'); root.replaceChildren();
   const nav = el('div', 'reader-nav');
   const back = el('button', 'back-button', '← Library'); back.type = 'button'; back.onclick = closeNote;
-  nav.append(back, el('span', 'reader-breadcrumb', path), el('span', 'reading-label', 'Reading view'));
+  nav.append(back, el('span', 'reader-breadcrumb', note.vault), el('span', 'reading-label', 'Reading view'));
   const article = el('article', 'article');
-  article.append(el('div', 'eyebrow', note.vault.toUpperCase()), el('h1', 'note-title', note.title));
+  article.append(el('div', 'eyebrow', note.vault + ' / read only'), el('h1', 'note-title', note.title));
+  article.append(el('div', 'note-meta', [note.date, `${note.minutes || 1} min read`, ...(note.facts || []).map(f=>`${f.label}: ${f.value}`)].filter(Boolean).join(' · ')));
   if (note.tags.length) { const tags = el('div', 'note-tags'); for (const tag of note.tags) tags.append(el('span', '', '#' + tag.replace(/^#/, ''))); article.append(tags); }
   const prose = el('div', 'prose');
-  // Avoid repeating a leading title already shown above the article.
-  const leading = note.body.match(/^\s*#\s+(.+)\r?\n/);
-  const body = leading && leading[1].trim() === note.title ? note.body.slice(leading[0].length) : note.body;
+  // Metadata precedes the H1 in many agent notes; strip it first so generated
+  // IDs cannot reappear as a second, oversized title inside the article.
+  let body = note.body.replace(/^(?:\s*(?:Tags|Date):[^\n]*(?:\n|$))+/i, '');
+  const leading = body.match(/^\s*#\s+(.+)(?:\r?\n|$)/);
+  if (leading && (fold(leading[1].replace(/[*`]/g,'')) === fold(note.title) || /^\d{10,13}(?:[-_]|$)/.test(leading[1]))) body = body.slice(leading[0].length);
   prose.innerHTML = renderMarkdown(body); article.append(prose);
-  article.append(el('footer', 'article-footer', `${demo ? 'Sample library' : 'Saved from GitHub · ' + snapshot.commit.slice(0, 7)}\n${note.path}`));
+  const source = el('details', 'article-footer'); source.append(el('summary', '', 'Source details'), el('div', '', `${demo ? 'Sample library' : 'GitHub · ' + snapshot.commit.slice(0, 7)} · ${note.path}`)); article.append(source);
   root.append(nav, article); $('#reader').scrollTop = 0;
   await decorate(prose, note, snapshot, assetURL);
   if (version !== renderVersion) return;
@@ -181,22 +206,28 @@ function route() {
   if (p.has('note') && snapshot) showNote(p.get('note'), p.get('heading') || '').catch(error => toast(error.message));
   else { selected = ''; $('.workspace').classList.remove('note-open'); drawList(); welcome(); }
 }
-async function refresh(nextConfig = config, nextToken = token, keepToken = remembered, { savedOnly = false } = {}) {
-  if (busy) return;
+async function refresh(nextConfig = config, nextToken = token, keepToken = remembered, { savedOnly = false, background = false } = {}) {
+  if (busy || (background && $('#connection-dialog').open)) return;
   busy = true; controller = new AbortController(); const generation = ++epoch;
   $('#refresh').disabled = true; $('#refresh').classList.add('spinning'); $('#connect-submit').disabled = true; $('#save-vaults').disabled = true;
   $('#sync-status').textContent = savedOnly ? 'Saving vault selection…' : 'Checking GitHub…'; $('#connection-error').hidden = true;
   try {
     const next = savedOnly ? selectSavedVaults(snapshot, nextConfig.vaults) : await fetchSnapshot(nextConfig, nextToken, demo ? null : snapshot, { signal: controller.signal, onProgress: (done, total) => { $('#sync-status').textContent = `Saving notes ${done} / ${total}…`; } });
     if (generation !== epoch) return;
+    if (snapshot && next.notes === snapshot.notes && nextToken === token && keepToken === remembered && JSON.stringify(nextConfig) === JSON.stringify(config)) {
+      snapshot.checkedAt = next.checkedAt;
+      await write('lastCheck', {repo:next.repo, commit:next.commit, at:next.checkedAt});
+      if (!background && $('#connection-dialog').open) $('#connection-dialog').close();
+      return;
+    }
     await saveConnection(next, nextConfig, keepToken ? nextToken : '');
     if (generation !== epoch) return;
     config = nextConfig; token = nextToken; remembered = keepToken; snapshot = next; demo = false; revokeAssets();
-    $('#connection-dialog').close(); $('#token-input').value = '';
-    filters(); drawList();
+    if (!background) { $('#connection-dialog').close(); $('#token-input').value = ''; }
+    tagOptions(); filters(); drawList();
     if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected);
     else { selected = ''; ++renderVersion; history.replaceState(null, '', location.pathname + location.search); $('.workspace').classList.remove('note-open'); welcome(); }
-    toast(`${snapshot.notes.length} notes ready to read offline.`);
+    if (!background) toast(`${snapshot.notes.length} ${snapshot.notes.length === 1 ? 'note' : 'notes'} ready to read offline.`);
     navigator.storage?.persist?.().catch(() => {});
   } catch (error) {
     controller?.abort();
@@ -219,7 +250,7 @@ function loadDemo() {
     ['codex/Reading offline.md', '# Reading offline\n\nPocket Vault saves your downloaded notes in this browser. Search runs locally, so reading and finding notes work without a connection.\n\n## Refreshing\n\nOpen the app while online to check for the latest GitHub snapshot. Only changed notes need downloading. Images are cached when viewed.\n\n```text\nGitHub → saved snapshot → local search\n```\n\nThere are no editing controls and no repository write operations.']
   ];
   snapshot = { repo: 'sample/library', branch: '', commit: 'sample0', checkedAt: Date.now(), notes: samples.map(([p, b]) => parseNote(p, b)), files: samples.map(([path]) => ({ path })) };
-  demo = true; filters(); drawList(); status(); welcome();
+  demo = true; tagOptions(); filters(); drawList(); status(); welcome();
   if (matchMedia('(min-width: 761px)').matches) showNote(snapshot.notes[0].path);
 }
 $('#connection-form').addEventListener('submit', event => {
@@ -232,9 +263,12 @@ $('#save-vaults').onclick = saveVaultSelection;
 $('#close-settings').onclick = () => { $('#connection-dialog').close(); $('#token-input').value = ''; };
 $('#connection-dialog').addEventListener('cancel', () => { $('#token-input').value = ''; });
 $('#refresh').onclick = () => { if (demo || !snapshot || (config.authRequired && !token)) openSettings(); else refresh(); };
-$('#search').addEventListener('input', drawList);
+$('#search').addEventListener('input', () => drawList());
+$('#tag-filter').onchange = () => { tag = $('#tag-filter').value; drawList(); };
 $('.brand').onclick = event => { event.preventDefault(); closeNote(); };
 $('#reader-content').addEventListener('click', async event => {
+  const local = event.target.closest('a[data-local-anchor]');
+  if (local) { event.preventDefault(); document.getElementById(local.dataset.localAnchor)?.scrollIntoView({block:'start'}); return; }
   const link = event.target.closest('a[data-path]'); if (!link) return;
   event.preventDefault(); const path = link.dataset.path;
   if (/\.md$/i.test(path)) navigate(path, link.dataset.anchor || '');
@@ -250,21 +284,23 @@ $('#forget').onclick = async () => {
   controller?.abort(); ++epoch; ++renderVersion;
   try {
     await clearAll(); revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: 'user/vault', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
-    $('#connection-dialog').close(); closeNote(); filters(); status(); toast('This device has been disconnected and cleared.');
+    $('#connection-dialog').close(); tag = ''; tagOptions(); closeNote(); filters(); status(); toast('This device has been disconnected and cleared.');
   } catch (error) { toast(error.message); }
 };
 window.addEventListener('hashchange', route);
-window.addEventListener('online', () => { status(); if ((!config.authRequired || token) && snapshot && !demo && !busy) refresh(); });
+window.addEventListener('online', () => { status(); if ((!config.authRequired || token) && snapshot && !demo && !busy) refresh(config, token, remembered, {background:true}); });
 window.addEventListener('offline', status);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && (!config.authRequired || token) && snapshot && !demo && !busy && navigator.onLine && Date.now() - snapshot.checkedAt > 60 * 60 * 1000) refresh(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && (!config.authRequired || token) && snapshot && !demo && !busy && navigator.onLine && Date.now() - snapshot.checkedAt > 60 * 60 * 1000) refresh(config, token, remembered, {background:true}); });
 document.addEventListener('keydown', event => { if (event.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName) && !$('#connection-dialog').open) { event.preventDefault(); closeNote(); $('#search').focus(); } });
 async function boot() {
   try {
-    const [saved, settings, credential] = await Promise.all([read('snapshot'), read('config'), read('credential')]);
-    snapshot = saved || null; if (settings) config = settings; token = credential || ''; remembered = !!credential;
-    filters(); drawList(); welcome(); status(); route();
-    if (snapshot && (!config.authRequired || token) && navigator.onLine) refresh();
+    const [saved, settings, credential, lastCheck] = await Promise.all([read('snapshot'), read('config'), read('credential'), read('lastCheck')]);
+    snapshot = saved ? {...saved, notes:saved.notes.map(cachedNote)} : null;
+    if (snapshot && lastCheck?.repo === snapshot.repo && lastCheck?.commit === snapshot.commit) snapshot.checkedAt = Math.max(snapshot.checkedAt, lastCheck.at);
+    if (settings) config = settings; token = credential || ''; remembered = !!credential;
+    tagOptions(); filters(); status(); route();
+    if (snapshot && (!config.authRequired || token) && navigator.onLine) setTimeout(() => refresh(config, token, remembered, {background:true}), 150);
   } catch (error) { filters(); drawList(); welcome(); toast(error.message, 12000); }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => toast('Offline app installation is unavailable in this browser.'));
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', {updateViaCache:'none'}).catch(() => toast('Offline app installation is unavailable in this browser.'));
 }
 boot();

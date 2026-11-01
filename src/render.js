@@ -4,7 +4,7 @@ import footnote from 'markdown-it-footnote';
 import tasks from 'markdown-it-task-lists';
 import mark from 'markdown-it-mark';
 import { tex } from '@mdit/plugin-tex';
-import { resolveFile } from './core.js';
+import { resolveFile, fold } from './core.js';
 const md = new MarkdownIt({ html: true, linkify: true, breaks: false }).use(footnote).use(tasks).use(mark);
 const escape = value => md.utils.escapeHtml(String(value));
 md.use(tex, { delimiters: 'all', mathFence: true, render: (content, displayMode) => `<span class="math-source" data-tex="${escape(content)}" data-display="${!!displayMode}"></span>` });
@@ -91,6 +91,7 @@ export async function decorate(container, note, snapshot, assetURL, depth = 0, a
   if (container.querySelector('pre code')) jobs.push(import('./highlight.js').then(m => m.highlightCode(container)));
   const files = snapshot.files;
   for (const a of container.querySelectorAll('a')) {
+    if (a.dataset.tag) continue;
     const target = a.dataset.wiki ?? a.getAttribute('href');
     if (!target || /^(?:https?:|mailto:)/i.test(target)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; continue; }
     if (target.startsWith('#') && !a.dataset.wiki) {
@@ -146,7 +147,46 @@ sourceMD.renderer.rules.code_inline = (tokens,i) => `<span class="syntax-code">$
 sourceMD.renderer.rules.image = (tokens,i) => `<a href="${escape(tokens[i].attrGet('src') || '')}">![${escape(tokens[i].content)}]</a>`;
 sourceMD.renderer.rules.softbreak = () => '\n';
 sourceMD.renderer.rules.hardbreak = () => '  \n';
-export function renderSource(body) {
+// Work on parser tokens, not HTML: never nest links or activate hashtags in
+// code, escaped text, destinations or wiki labels. Backticks are tag notation
+// only on an explicit Tags: line.
+sourceMD.core.ruler.after('inline', 'tag_links', state => {
+  const tags = state.env.tags;
+  if (!tags?.size) return;
+  for (const block of state.tokens) {
+    if (!block.children) continue;
+    const children = []; let linkDepth = 0;
+    const text = content => { const t = new state.Token('text', '', 0); t.content = content; return t; };
+    const link = (content, tag) => { const t = new state.Token('tag_link', '', 0); t.content = content; t.meta = { tag }; return t; };
+    for (const token of block.children) {
+      if (token.type === 'link_open') linkDepth++;
+      if (!linkDepth && state.env.tagLine && token.type === 'code_inline' && tags.has(fold(token.content.replace(/^#/, '')))) {
+        children.push(link(token.markup + token.content + token.markup, tags.get(fold(token.content.replace(/^#/, '')))));
+      } else if (!linkDepth && token.type === 'text') {
+        const pattern = state.env.tagLine
+          ? /(^|[\s,\[\]])(#?[\p{L}\p{N}_/-]+)(?=$|[\s,\[\]])/gu
+          : /(^|\s)(#[\p{L}_][\p{L}\p{N}_/-]*)/gu;
+        let start = 0;
+        for (const match of token.content.matchAll(pattern)) {
+          const tag = tags.get(fold(match[2].replace(/^#/, '')));
+          if (!tag) continue;
+          const index = match.index + match[1].length;
+          children.push(text(token.content.slice(start, index)), link(match[2], tag));
+          start = index + match[2].length;
+        }
+        children.push(text(token.content.slice(start)));
+      } else children.push(token);
+      if (token.type === 'link_close') linkDepth--;
+    }
+    block.children = children;
+  }
+});
+sourceMD.renderer.rules.tag_link = (tokens, i) => {
+  const { tag } = tokens[i].meta;
+  return `<a class="tag-link" href="#tag=${encodeURIComponent(tag)}" data-tag="${escape(tag)}">${escape(tokens[i].content)}</a>`;
+};
+export function renderSource(body, noteTags = []) {
+  const tags = new Map(noteTags.map(tag => [fold(tag), tag]));
   const lines=body.split('\n'), styles=new Map(), literal=new Set();
   for (const t of sourceMD.parse(body,{})) {
     if (!t.map) continue;
@@ -158,6 +198,6 @@ export function renderSource(body) {
   return lines.map((line,i)=>{
     const kind=styles.get(i)||'';
     const heading=kind==='heading' ? ` data-heading="${escape(line.replace(/^\s*#+\s*/, '').replace(/\s+#+\s*$/, ''))}"` : '';
-    return `<div class="source-line syntax-${kind}"${heading}><span class="line-number" aria-hidden="true">${i+1}</span><span class="line-text">${literal.has(i)?escape(line):sourceMD.renderInline(line)}</span></div>`;
+    return `<div class="source-line syntax-${kind}"${heading}><span class="line-number" aria-hidden="true">${i+1}</span><span class="line-text">${literal.has(i)?escape(line):sourceMD.renderInline(line, { tags, tagLine: /^Tags:\s*\S/i.test(line) })}</span></div>`;
   }).join('');
 }

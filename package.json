@@ -14,7 +14,8 @@
     "test:rendering": "node test/rendering.mjs",
     "test:cache-recovery": "node test/cache-recovery.mjs",
     "test:startup-retention": "node test/startup-retention.mjs",
-    "test:workspace": "node test/workspace.mjs"
+    "test:workspace": "node test/workspace.mjs",
+    "test:tags": "node test/tags.mjs"
   },
   "dependencies": {
     "@mdit/plugin-tex": "^1.2.0",

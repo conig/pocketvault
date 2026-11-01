@@ -16,7 +16,9 @@ let tag = '', listLimit = 50;
 function tagOptions() {
   const select = $('#tag-filter'), counts = new Map();
   for (const note of snapshot?.notes || []) for (const value of note.tags) counts.set(value,(counts.get(value)||0)+1);
-  if (!counts.has(tag)) tag = '';
+  // A restored tag URL may name a parent tag or a tag no longer in the cache.
+  // Keep that filter (including zero results), rather than silently showing all.
+  if (tag && !counts.has(tag)) counts.set(tag, searchNotes(snapshot?.notes || [], '', 'all', tag).length);
   select.replaceChildren(new Option('All tags', ''));
   for (const [value,count] of [...counts].sort(([a],[b])=>a.localeCompare(b))) select.append(new Option(`#${value} (${count})`,value));
   select.value = tag; select.disabled = !counts.size;
@@ -106,7 +108,7 @@ function drawList({ preserveLimit = false } = {}) {
   const list = $('#note-list'); list.replaceChildren();
   $('#demo-badge').hidden = !demo;
   const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault, tag) : [];
-  $('#result-count').textContent = snapshot ? `${notes.length.toLocaleString()} ${notes.length === 1 ? 'note' : 'notes'}${$('#search').value ? ' found' : ''}` : 'Your notes live here';
+  $('#result-count').textContent = snapshot ? `${notes.length.toLocaleString()} ${notes.length === 1 ? 'note' : 'notes'}${$('#search').value ? ' found' : ''}${tag ? ' · #' + tag : ''}` : 'Your notes live here';
   if (!snapshot) return;
   if (!notes.length) {
     const empty = el('div', 'empty-list'); empty.append(el('span', '', 'No matches')); list.append(empty); return;
@@ -176,7 +178,19 @@ async function showNote(path, anchor = '') {
   nav.append(back, el('span', 'reader-breadcrumb', note.title));
   const article = el('article', 'article');
   const prose = el('div', 'prose source-view');
-  prose.innerHTML = renderSource(note.body); article.append(prose);
+  prose.innerHTML = renderSource(note.body, note.tags);
+  // Frontmatter is concealed in source mode; expose only tags that don't
+  // already have a link in the body, avoiding duplicate tag chrome.
+  const visibleTags = new Set([...prose.querySelectorAll('a[data-tag]')].map(a => a.dataset.tag));
+  const metadataTags = note.tags.filter(tag => !visibleTags.has(tag));
+  if (metadataTags.length) {
+    const tags = el('div', 'note-tags');
+    for (const tag of metadataTags) {
+      const link = el('a', 'tag-link', '#' + tag); link.dataset.tag = tag; link.href = '#tag=' + encodeURIComponent(tag); tags.append(link);
+    }
+    article.append(tags);
+  }
+  article.append(prose);
   root.append(nav, article); $('#reader').scrollTop = 0;
   // Paint source immediately; parser initialization never blocks reading.
   import('./syntax.js').then(m=>m.highlightSource(prose,note.body)).catch(()=>{});
@@ -189,10 +203,19 @@ function closeNote() {
   selected = ''; renderVersion++; $('.workspace').classList.remove('note-open'); drawList(); welcome(); $('#search').focus({ preventScroll: true });
 }
 function route() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.has('tag')) {
+    // Tag links are navigation to the whole saved library, not an intersection
+    // with whichever search/vault happened to be active in the previous view.
+    selected = ''; ++renderVersion; vault = 'all'; $('#search').value = '';
+    tag = p.get('tag'); tagOptions(); filters(); drawList();
+    $('.workspace').classList.remove('note-open'); welcome();
+    $('#note-list').scrollTop = 0; $('#search').focus({ preventScroll: true });
+    return;
+  }
   // Always expose the cached library before resolving a restored/deep link or
   // loading renderer chunks. A missing note must not make all notes disappear.
   drawList();
-  const p = new URLSearchParams(location.hash.slice(1));
   if (p.has('note') && snapshot?.notes.some(note => note.path === p.get('note'))) {
     showNote(p.get('note'), p.get('heading') || '').catch(error => {
       selected = ''; $('.workspace').classList.remove('note-open'); welcome();
@@ -279,7 +302,13 @@ $('#close-settings').onclick = () => { if (!snapshot) return; $('#connection-dia
 $('#connection-dialog').addEventListener('cancel', (event) => { if (!snapshot) { event.preventDefault(); return; } $('#token-input').value = ''; });
 $('#refresh').onclick = () => { if (demo || !snapshot || (config.authRequired && !token)) openSettings(); else refresh(); };
 $('#search').addEventListener('input', () => drawList());
-$('#tag-filter').onchange = () => { tag = $('#tag-filter').value; drawList(); };
+$('#tag-filter').onchange = () => {
+  tag = $('#tag-filter').value;
+  if (new URLSearchParams(location.hash.slice(1)).has('tag')) {
+    history.replaceState(null, '', location.pathname + location.search + (tag ? '#tag=' + encodeURIComponent(tag) : ''));
+  }
+  drawList();
+};
 $('.brand').onclick = event => { event.preventDefault(); closeNote(); };
 $('#reader-content').addEventListener('click', async event => {
   const local = event.target.closest('a[data-local-anchor]');

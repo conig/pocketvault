@@ -37,6 +37,7 @@ try {
   await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-read-only-token');
   await page.locator('#connect-submit').click();
   await page.waitForFunction(() => document.querySelector('#result-count').textContent === '3 notes');
+  check(!await page.locator('#notice').isVisible(), 'successful population does not cover the reader with a floating readiness notification');
   check(await page.locator('.note-row').count() === 3, 'downloads a repository and lists all notes');
   check(requests.every(r => r.method === 'GET' && r.url.startsWith('https://api.github.com/') && r.auth === 'Bearer test-read-only-token'), 'all authenticated requests are GETs to GitHub only');
   await page.locator('#search').fill('lemon');

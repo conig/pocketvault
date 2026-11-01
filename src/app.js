@@ -227,7 +227,6 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
     tagOptions(); filters(); drawList();
     if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected);
     else { selected = ''; ++renderVersion; history.replaceState(null, '', location.pathname + location.search); $('.workspace').classList.remove('note-open'); welcome(); }
-    if (!background) toast(`${snapshot.notes.length} ${snapshot.notes.length === 1 ? 'note' : 'notes'} ready to read offline.`);
     navigator.storage?.persist?.().catch(() => {});
   } catch (error) {
     controller?.abort();

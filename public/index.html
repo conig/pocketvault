@@ -25,9 +25,7 @@
 <div class="dialog-top"><span class="eyebrow">~/vaults</span><button type="button" id="close-settings" class="icon-button" aria-label="Close settings">×</button></div>
 <h2 id="connection-title">Connect</h2>
 <section class="appearance-settings" aria-label="Appearance">
-<label for="theme-select">Theme</label>
-<select id="theme-select" aria-describedby="theme-status"><!-- THEME_OPTIONS --></select>
-<p id="theme-status" role="status">Applies immediately · saved on this device</p>
+<button type="button" id="open-themes" class="theme-picker-button" aria-haspopup="dialog">Theme <span id="theme-name">onedark</span><span aria-hidden="true">→</span></button>
 </section>
 <section id="vault-settings" hidden aria-labelledby="vault-settings-title">
 <fieldset class="vault-choices"><legend id="vault-settings-title">Vaults on this device</legend><div id="vault-options"></div></fieldset>
@@ -51,7 +49,16 @@
 <details><summary>Device cache & connection</summary><button type="button" class="primary" id="diagnose-device">Check device cache & GitHub</button><pre id="device-diagnostics" role="status" hidden></pre></details>
 <button type="button" class="text-button danger" id="forget">Forget this device</button>
 
-</form></dialog>
+</form>
+<section id="theme-page" aria-labelledby="theme-title" hidden>
+<div class="dialog-top"><button type="button" id="themes-back" class="back-button" aria-label="Back to settings">←</button><h2 id="theme-title">Themes</h2></div>
+<label class="search-box"><input id="theme-search" type="search" placeholder="Search themes…" aria-label="Search themes" autocomplete="off" spellcheck="false"></label>
+<div id="theme-gallery" aria-label="Themes"></div>
+<template id="theme-previews"><!-- THEME_PREVIEWS --></template>
+<p id="theme-empty" hidden>No matches</p>
+<p id="theme-status" class="error" role="status" hidden></p>
+</section>
+</dialog>
 <dialog id="source-dialog" aria-labelledby="source-title">
 <form id="source-form">
 <div class="dialog-top"><span class="eyebrow">GITHUB SOURCE</span><button type="button" id="source-back" class="icon-button" aria-label="Back to connection">←</button></div>

@@ -52,9 +52,8 @@ function filters() {
 }
 function openSettings() {
   cancelDiscovery();
-  $('#theme-select').value=currentTheme();
-  $('#theme-status').textContent='Applies immediately · saved on this device';
-  $('#theme-status').classList.remove('error');
+  closeThemes(false);
+  updateThemeSelection();
   $('#device-diagnostics').hidden = true; $('#device-diagnostics').textContent = '';
   const connected = !!snapshot && !demo;
   $('#connection-title').textContent = connected ? 'Settings' : 'Connect';
@@ -396,17 +395,49 @@ $('#source-dialog').addEventListener('cancel', event => { event.preventDefault()
 $('#token-input').addEventListener('input', () => { if (discoveryController) cancelDiscovery(); });
 
 $('#settings').onclick = openSettings;
-$('#theme-select').onchange = () => {
-  try {
-    $('#theme-select').value=saveTheme($('#theme-select').value);
-    $('#theme-status').textContent='Theme saved on this device';
-    $('#theme-status').classList.remove('error');
-  } catch (error) {
-    $('#theme-select').value=currentTheme();
-    $('#theme-status').textContent=error.message;
-    $('#theme-status').classList.add('error');
-  }
+function updateThemeSelection() {
+  $('#theme-name').textContent=currentTheme();
+  for (const card of document.querySelectorAll('.theme-preview')) card.setAttribute('aria-pressed',String(card.dataset.previewTheme===currentTheme()));
+}
+function closeThemes(focus = true) {
+  const wasOpen=!$('#theme-page').hidden;
+  $('#theme-page').hidden=true; $('#connection-form').hidden=false;
+  $('#theme-gallery').replaceChildren();
+  $('#connection-dialog').classList.remove('theme-page-open');
+  $('#connection-dialog').style.removeProperty('height');
+  $('#connection-dialog').setAttribute('aria-labelledby','connection-title');
+  if (focus && wasOpen) $('#open-themes').focus();
+}
+$('#open-themes').onclick = () => {
+  const dialog=$('#connection-dialog'), height=dialog.getBoundingClientRect().height;
+  dialog.style.height=height+'px'; dialog.classList.add('theme-page-open');
+  $('#theme-gallery').append($('#theme-previews').content.cloneNode(true));
+  $('#connection-form').hidden=true; $('#theme-page').hidden=false;
+  dialog.setAttribute('aria-labelledby','theme-title');
+  $('#theme-status').hidden=true; $('#theme-search').value='';
+  for (const card of document.querySelectorAll('.theme-preview')) card.hidden=false;
+  $('#theme-empty').hidden=true; updateThemeSelection();
+  $('#theme-search').focus({preventScroll:true});
+  $('#theme-gallery').scrollTop=0;
 };
+$('#themes-back').onclick = () => closeThemes();
+$('#theme-page').addEventListener('keydown', event => {
+  if (event.key==='Escape') {event.preventDefault();event.stopPropagation();closeThemes();}
+});
+$('#theme-search').oninput = () => {
+  const query=$('#theme-search').value.trim().toLowerCase();let count=0;
+  for (const card of document.querySelectorAll('.theme-preview')) {card.hidden=!card.dataset.previewTheme.toLowerCase().includes(query);if(!card.hidden)count++;}
+  $('#theme-empty').hidden=!!count;
+};
+$('#theme-gallery').onclick = event => {
+  const card=event.target.closest('.theme-preview');if(!card)return;
+  try {saveTheme(card.dataset.previewTheme);$('#theme-status').hidden=true;}
+  catch (error) {$('#theme-status').textContent=error.message;$('#theme-status').hidden=false;}
+  updateThemeSelection();
+};
+$('#connection-dialog').addEventListener('cancel', event => {
+  if (!$('#theme-page').hidden) {event.preventDefault();closeThemes();event.stopImmediatePropagation();}
+});
 $('#diagnose-device').onclick = diagnoseDevice;
 $('#save-vaults').onclick = saveVaultSelection;
 $('#close-settings').onclick = () => { if (!snapshot) return; $('#connection-dialog').close(); $('#token-input').value = ''; };

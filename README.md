@@ -38,7 +38,7 @@ It checks for updates on opening when credentials are available, on reconnect, a
 
 ## Themes
 
-Use **Settings → Theme** to apply and save a theme immediately, independently of
+Use **Settings → Theme** to open a searchable gallery inside the same popup. Each choice previews a normal note card in its own palette, with its name, tags and snippet. Selecting a card applies and saves it immediately; a check marks the active theme. Back or Escape returns to Settings without losing connection-form values. Theme selection is independent of
 vault selection or GitHub credentials. The picker is also available on the initial
 Connect screen. The choice is local to this browser/device and survives offline
 reloads and browser restarts; **Forget this device** resets it to One Dark.

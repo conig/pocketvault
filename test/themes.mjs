@@ -31,6 +31,8 @@ const themeState=page=>page.evaluate(()=>{
   const bg=selector=>{const el=document.querySelector(selector);return el?getComputedStyle(el).backgroundColor:null;};
   return {id:root.dataset.theme,scheme:style.colorScheme,paper:style.getPropertyValue('--paper').trim(),background:bg('html'),chrome:bg('.topbar'),reader:bg('.reader'),heading:color('.source-view .syntax-heading'),link:color('.source-view a'),meta:document.querySelector('meta[name="theme-color"]').content,saved:localStorage.getItem('pocket-vault-theme')};
 });
+async function choose(page,id) {if(await page.locator('#theme-page').isHidden()) await page.locator('#open-themes').click();await page.locator(`[data-preview-theme="${id}"]`).click();}
+async function leaveGallery(page) {if(await page.locator('#theme-page').isVisible()) await page.locator('#themes-back').click();}
 const snapshot=page=>page.evaluate(async()=>{
   const db=await new Promise((r,j)=>{const q=indexedDB.open('pocket-vault');q.onsuccess=()=>r(q.result);q.onerror=j;});
   try{return await new Promise((r,j)=>{const q=db.transaction('data').objectStore('data').get('snapshot');q.onsuccess=()=>r(q.result);q.onerror=j;});}finally{db.close();}
@@ -46,17 +48,25 @@ try {
     const data=url.includes('/commits?')?[{sha:'fixture',commit:{tree:{sha:'tree'}}}]:url.includes('/git/trees/')?{tree:docs.map(d=>({path:d.path,sha:d.sha,type:'blob',mode:'100644',size:d.text.length}))}:{encoding:'base64',content:Buffer.from(docs.find(d=>url.endsWith('/'+d.sha)).text).toString('base64')};
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
-  await page.goto(origin);await page.locator('#theme-select').waitFor();
+  await page.goto(origin);await page.locator('#open-themes').waitFor();
   for(const colorScheme of ['light','dark']) {
     await page.emulateMedia({colorScheme});assert.equal((await themeState(page)).scheme,'dark');
   }
-  assert.equal(await page.locator('#theme-select option').count(),Object.keys(catalog.themes).length);
-  assert.equal(await page.locator('#theme-select optgroup').count(),2);
+  const initialFrame=await page.locator('#connection-dialog').boundingBox();
+  await page.locator('#token-input').fill('unsaved-test-token');
+  await page.locator('#open-themes').click();
+  assert.equal(await page.locator('.theme-preview').count(),Object.keys(catalog.themes).length);
+  const galleryFrame=await page.locator('#connection-dialog').boundingBox();
+  assert.equal(initialFrame.width,galleryFrame.width);assert.equal(initialFrame.height,galleryFrame.height);
+  for(const [id,t] of Object.entries(catalog.themes)) {const colors=await page.locator(`[data-preview-theme="${id}"]`).evaluate(n=>({paper:getComputedStyle(n).getPropertyValue('--paper').trim(),ink:getComputedStyle(n.querySelector('h2')).color}));assert.equal(colors.paper,t.base_30.black);assert.equal(colors.ink,rgb(t.base_30.white));}
+  await page.locator('#theme-search').fill('catppuccin');assert.ok(await page.locator('.theme-preview:visible').count()>=2);
+  await page.locator('#theme-search').fill('not-a-theme');assert.equal(await page.locator('.theme-preview:visible').count(),0);assert.ok(await page.locator('#theme-empty').isVisible());
+  await page.keyboard.press('Escape');assert.ok(await page.locator('#connection-form').isVisible());assert.equal(await page.locator('#token-input').inputValue(),'unsaved-test-token');assert.equal(await page.locator('#open-themes').evaluate(n=>n===document.activeElement),true);
   // Theme settings are usable before GitHub is connected, and survive reload.
-  await page.locator('#theme-select').selectOption('catppuccin');
+  await choose(page,'catppuccin');
   assert.equal((await themeState(page)).saved,'catppuccin');
-  await page.reload();await page.locator('#theme-select').waitFor();
-  assert.equal(await page.locator('#theme-select').inputValue(),'catppuccin');
+  await page.reload();await page.locator('#open-themes').waitFor();
+  assert.equal(await page.locator('#theme-name').innerText(),'catppuccin');
   await page.locator('#manual-connection').evaluate(node => node.open = true);await page.locator('#repo-input').fill('fixture/notes');
   await page.locator('#token-input').fill('synthetic-token');
   await page.locator('#connect-submit').click();await page.locator('.note-row').first().waitFor();
@@ -65,7 +75,7 @@ try {
   const before=await snapshot(page), apiCalls=requests.filter(u=>u.includes('api.github.com')).length;
   await page.locator('#settings').click();
   for(const [id,theme] of Object.entries(catalog.themes)) {
-    await page.locator('#theme-select').selectOption(id);
+    await choose(page,id);
     const state=await themeState(page);
     assert.equal(state.id,id);assert.equal(state.saved,id);assert.equal(state.scheme,theme.type,id);
     assert.equal(state.paper,theme.base_30.black,id);
@@ -80,24 +90,24 @@ try {
   assert.equal(requests.filter(u=>u.includes('api.github.com')).length,apiCalls);
   assert.ok(requests.every(u=>u.startsWith(origin)||u.startsWith('https://api.github.com/')),'No external theme/font requests.');
   // A failed save must not claim persistence or leave a different preview active.
-  await page.locator('#theme-select').selectOption('onedark');
+  await choose(page,'onedark');
   await page.evaluate(()=>{window.originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='pocket-vault-theme')throw new DOMException('Denied','SecurityError');return window.originalSetItem.call(this,key,value);};});
-  await page.locator('#theme-select').selectOption('one_light');
+  await choose(page,'one_light');
   assert.match(await page.locator('#theme-status').innerText(),/Could not save/);
   assert.equal((await themeState(page)).id,'onedark');assert.equal((await themeState(page)).saved,'onedark');
-  assert.equal(await page.locator('#theme-select').inputValue(),'onedark');
+  assert.equal(await page.locator('[aria-pressed="true"].theme-preview').getAttribute('data-preview-theme'),'onedark');
   await page.evaluate(()=>Storage.prototype.setItem=window.originalSetItem);
   for(const id of ['onedark','catppuccin','gruvbox','one_light']) {
-    await page.locator('#theme-select').selectOption(id);
+    await choose(page,id);
     await page.screenshot({path:`${captures}/${id}-settings.png`,animations:'disabled'});
-    await page.locator('#close-settings').click();
+    await leaveGallery(page);await page.locator('#close-settings').click();
     await page.screenshot({path:`${captures}/${id}-reader.png`,animations:'disabled'});
     await page.locator('#settings').click();
   }
   await page.setViewportSize({width:320,height:720});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  assert.ok(await page.locator('#theme-select').isVisible());
-  await page.setViewportSize({width:1360,height:900});await page.locator('#close-settings').click();
+  assert.ok(await page.locator('#open-themes').isVisible());
+  await page.setViewportSize({width:1360,height:900});await leaveGallery(page);await page.locator('#close-settings').click();
   await page.screenshot({path:`${captures}/one_light-desktop.png`,animations:'disabled'});
   await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   // Reopen the actual browser profile, offline, not just a same-page preview.
@@ -114,8 +124,8 @@ try {
   assert.equal(await offline.evaluate(()=>window.firstBodyTheme),'one_light','Restore before body content paints.');
   assert.deepEqual(await snapshot(offline),before);
   await offline.locator('#settings').click();
-  await offline.locator('#theme-select').selectOption('nord');
-  await offline.locator('#close-settings').click();await offline.reload();
+  await choose(offline,'nord');
+  await leaveGallery(offline);await offline.locator('#close-settings').click();await offline.reload();
   await offline.locator('[data-syntax-engine="tree-sitter"]').waitFor();
   assert.equal((await themeState(offline)).id,'nord');
   // Missing catalog IDs and inaccessible preference storage must boot safely.
@@ -126,8 +136,8 @@ try {
   await blocked.addInitScript(()=>{Storage.prototype.getItem=()=>{throw new DOMException('Denied','SecurityError');};});
   await blocked.goto(origin);await blocked.locator('.note-row').first().waitFor();
   assert.equal(await blocked.evaluate(()=>document.documentElement.dataset.theme),'onedark');await blocked.close();
-  await offline.locator('#settings').click();await offline.locator('#theme-select').selectOption('catppuccin');
-  await offline.evaluate(()=>localStorage.setItem('unrelated-setting','keep'));
+  await offline.locator('#settings').click();await choose(offline,'catppuccin');
+  await leaveGallery(offline);await offline.evaluate(()=>localStorage.setItem('unrelated-setting','keep'));
   offline.once('dialog',d=>d.accept());await offline.locator('#forget').click();
   await offline.locator('#token-input').waitFor();
   assert.equal((await themeState(offline)).id,'onedark');assert.equal((await themeState(offline)).saved,null);

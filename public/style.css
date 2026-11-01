@@ -21,10 +21,25 @@
 @media(max-width:760px){.workspace{display:block;height:calc(100dvh - 48px)}.topbar{height:48px;padding:0 12px}.brand{font-size:12px}.library-top{padding:10px 12px 0}.note-row{padding:13px 14px}.note-row h2{font-size:14px}.row-tags{font-size:11px}.article{padding:16px 10px 60px}.source-view{font-size:13px;line-height:1.85}.line-number{flex-basis:2.7em;padding-right:1em;font-size:10px;line-height:2.4}.reader-nav{padding:0 14px}.reader-breadcrumb{font-size:11px}.filter-menu[open]{right:12px;top:10px}.filters{flex-wrap:wrap;margin-right:0;padding-right:0}.setup dialog{margin:24px auto}}
 
 .appearance-settings{margin:0 0 18px;padding:0 0 18px;border-bottom:1px solid var(--line)}
-.appearance-settings label{display:block;font-size:11px;margin-bottom:8px}
-#theme-select{width:100%;min-height:44px;padding:8px 10px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:2px;font-size:12px}
-#theme-status{font-size:10px;line-height:1.8;color:var(--muted);margin:8px 0 0}
-#theme-status.error{color:var(--error)}
+.theme-picker-button{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 12px;border:0;background:var(--panel);color:var(--ink);text-align:left;font-size:12px}
+#theme-name{margin-left:auto;color:var(--muted);font-size:11px}
+#theme-page{height:100%;min-height:0;display:flex;flex-direction:column;gap:12px}
+#theme-page[hidden]{display:none}
+#theme-page .dialog-top{flex-shrink:0;justify-content:flex-start;gap:14px}
+#theme-title{margin:0;font-size:18px}
+#theme-page .search-box{flex:0 0 44px}
+#theme-page input{margin:0;border:0;padding:0;background:transparent;min-height:0}
+#theme-gallery{overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1;display:flex;flex-direction:column;gap:8px;scrollbar-gutter:stable}
+.theme-preview.note-row{flex-shrink:0;background:var(--chrome);color:var(--ink);border:1px solid var(--line);border-left:2px solid transparent;padding:14px;min-height:100px}
+.theme-preview.note-row h2{font-size:13px;margin:0 0 5px;display:flex;justify-content:space-between;gap:10px}
+.theme-preview.note-row p{margin:7px 0 0}
+.theme-preview.note-row:hover{background:var(--panel)}
+.theme-preview[aria-pressed="true"]{border-left-color:var(--accent);background:var(--selection)}
+.theme-preview[aria-pressed="true"] h2::after{content:'✓';color:var(--accent)}
+#theme-empty,#theme-status{font-size:11px;margin:0;line-height:1.8}
+#theme-status{flex-shrink:0;color:var(--error)}
+dialog.theme-page-open{overflow:hidden;min-height:min(400px,calc(100dvh - 48px));max-height:calc(100dvh - 30px)}
+.setup dialog.theme-page-open{max-height:calc(100dvh - 48px)}
 ::selection{background:var(--selection);color:var(--ink)}
 
 /* Connection source choices share the app’s native form styling. */

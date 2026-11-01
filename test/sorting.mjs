@@ -58,7 +58,7 @@ try {
   assert.deepEqual(await titles(), ['Z modified','B created','A old','C undated']);
   await page.locator('.note-row').filter({hasText:'A old'}).click();
   await page.locator('.source-view').waitFor();
-  await page.locator('.back-button').click();
+  await page.getByRole('button', {name:'← Library',exact:true}).click();
   assert.deepEqual(await titles(), ['A old','Z modified','B created','C undated']);
   await page.locator('#search').fill('reference');
   // A/B also have a matching tag: relevance must still beat recency.
@@ -76,7 +76,7 @@ try {
   await page.locator('#token-input').fill('fake-token');
   await page.locator('#connect-submit').click();
   await page.locator('#connection-dialog').waitFor({state:'hidden'});
-  await page.locator('.back-button').click();
+  await page.getByRole('button', {name:'← Library',exact:true}).click();
   assert.deepEqual(await titles(), ['B created','A old','Z modified','C undated']);
   assert.deepEqual(await accessRecords(), beforeRefresh, 'refreshing an open note is not another access');
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -86,11 +86,11 @@ try {
   assert.deepEqual(await titles(), ['B created','A old','Z modified','C undated']);
   // An offline open also persists, without a token or any repository writes.
   await page.locator('.note-row').filter({hasText:'C undated'}).click();
-  await page.locator('.source-view').waitFor(); await page.locator('.back-button').click();
+  await page.locator('.source-view').waitFor(); await page.getByRole('button', {name:'← Library',exact:true}).click();
   await page.reload(); await page.locator('.note-row').first().waitFor();
   assert.deepEqual(await titles(), ['C undated','B created','A old','Z modified']);
   await page.locator('.note-row').filter({hasText:'Z modified'}).click();
-  await page.locator('.source-view').waitFor(); await page.locator('.back-button').click();
+  await page.locator('.source-view').waitFor(); await page.getByRole('button', {name:'← Library',exact:true}).click();
   assert.equal((await accessRecords()).length, 4);
   // Excluding a vault must atomically purge its access-path metadata as well.
   await page.locator('#settings').click();
@@ -111,7 +111,7 @@ try {
   assert.deepEqual(await titles(), ['B created','A old','C undated']);
   assert.deepEqual(await accessRecords(), []);
   await page.locator('.note-row').filter({hasText:'C undated'}).click();
-  await page.locator('.source-view').waitFor(); await page.locator('.back-button').click();
+  await page.locator('.source-view').waitFor(); await page.getByRole('button', {name:'← Library',exact:true}).click();
   assert.equal((await accessRecords()).length, 1);
   await page.locator('#settings').click();
   page.once('dialog', dialog => dialog.accept());

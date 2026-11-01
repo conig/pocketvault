@@ -29,7 +29,7 @@ export function themeVariables(theme) {
 export function themeCSS(catalog) {
   validateCatalog(catalog);
   return Object.entries(catalog.themes).map(([id,theme])=>{
-    const selector=(id===DEFAULT_THEME?':root,':'')+`:root[data-theme="${id}"]`;
+    const selector=(id===DEFAULT_THEME?':root,':'')+`:root[data-theme="${id}"],[data-preview-theme="${id}"]`;
     const vars={'--theme-id':id,'color-scheme':theme.type,...themeVariables(theme)};
     return `${selector}{${Object.entries(vars).map(([key,value])=>`${key}:${value}`).join(';')}}`;
   }).join('\n')+'\n';

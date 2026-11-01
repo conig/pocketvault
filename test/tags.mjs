@@ -41,6 +41,16 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.note-row').length === 5);
   for (const width of [390, 1360]) {
     await page.setViewportSize({ width, height: 844 });
+    // Regression: choosing a tag in Filter must start a fresh tag view, not
+    // intersect the text query and vault that happened to be active beforehand.
+    await page.locator('#search').fill('Field');
+    await page.locator('.filter-menu').evaluate(n => { n.open = true; });
+    await page.locator('#tag-filter').selectOption('');
+    await page.locator('#filters button').filter({ hasText: /^Work$/ }).click();
+    await page.locator('#tag-filter').selectOption('Project/Alpha');
+    await expectResults(['Child', 'Field notes', 'Related']);
+    assert.equal(new URL(page.url()).hash, '#tag=Project%2FAlpha', 'Dropdown tag choices use whole-library tag navigation.');
+    await page.locator('.filter-menu').evaluate(n => { n.open = false; });
     // Deliberately hide related notes with both filters before opening the note.
     await page.locator('#search').fill('Field');
     await page.locator('.filter-menu').evaluate(n => { n.open = true; });
@@ -81,6 +91,12 @@ try {
   await page.locator('.note-row').first().waitFor();
   await expectResults(['Field notes', 'Related']);
   assert.equal(await page.locator('#tag-filter').inputValue(), 'yaml-only');
+  // The dropdown must clear a stale text query even when entirely offline.
+  await page.locator('#search').fill('Unicode');
+  await page.locator('.filter-menu').evaluate(n => { n.open = true; });
+  await page.locator('#tag-filter').selectOption('café/été');
+  await expectResults(['Field notes', 'Unicode']);
+  await page.locator('.filter-menu').evaluate(n => { n.open = false; });
   await openField();
   await page.locator('.source-view a[data-tag="reference"]').click();
   await expectResults(['Field notes']);

@@ -415,6 +415,12 @@ $('#refresh').onclick = () => { if (demo || !snapshot || (config.authRequired &&
 $('#search').addEventListener('input', () => drawList());
 $('#tag-filter').onchange = () => {
   tag = $('#tag-filter').value;
+  if (tag) {
+    // Use the same fresh, all-vault navigation as reader tag links.
+    const hash = '#tag=' + encodeURIComponent(tag);
+    if (location.hash === hash) route(); else location.hash = hash;
+    return;
+  }
   if (new URLSearchParams(location.hash.slice(1)).has('tag')) {
     history.replaceState(null, '', location.pathname + location.search + (tag ? '#tag=' + encodeURIComponent(tag) : ''));
   }

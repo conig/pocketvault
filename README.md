@@ -16,7 +16,7 @@ It checks for updates on opening when credentials are available, on reconnect, a
 ## Included
 
 - Search across human titles, aliases and full note contents; AND terms and quoted phrases; title-weighted results and snippets. YAML `title` / human aliases outrank generated identifiers. Timestamp IDs are not prominent headings; source paths are collapsed under Source details.
-- Tags extracted from YAML, plain `Tags:` lines and inline hashtags, displayed in both list and reader. Filter by tag or search `#tag` (including hierarchical tags). Compact date, reading time and recipe facts appear when available.
+- Tags extracted from YAML, plain `Tags:` lines and inline hashtags, displayed in both list and reader. Reader tags link to all matching saved notes across selected vaults, clearing prior search/vault filters; tag URLs support Back and offline reload. YAML-only tags remain available above the source. Code examples and existing links are not converted. Filter by tag or search `#tag` (including hierarchical tags). Compact date, reading time and recipe facts appear when available.
 - **Settings → Vaults on this device** after connection: choose work, personal, cooking, and/or codex, then **Save vault selection**. Choices persist per device and control downloads, full-text search and navigation filters. At least one vault must stay selected.
 - Removing vaults works offline and atomically deletes their saved notes, file names and unreferenced attachments; GitHub is never changed. Adding vaults downloads only their missing notes, even when the GitHub commit has not changed; it requires network/GitHub access. Failed downloads retain the previous complete selection. Closing Settings without saving discards edits. Existing installs default to all four vaults. Only per-vault note counts are retained for excluded vaults.
 - Separate filters for selected vaults.
@@ -60,6 +60,7 @@ npm run test:installability
 npm run test:vaults
 npm run test:rendering
 npm run test:performance
+npm run test:tags
 ```
 
 Unit tests cover allowlists, parsing, search/ranking, resolution, incremental/deletion behavior, authentication errors and GET-only networking. Browser tests use **synthetic fixtures and fake tokens**, covering phone navigation, section embeds, injection defense, offline reload/search, token opt-in/opt-out, refresh failure recovery, incremental updates, layout bounds and forgetting the device. Captures are written to `/tmp/pocket-vault-qa/`, never into the repository. `test:installability` starts a real cookie-gated HTTP server and a clean, non-incognito headless Chromium profile, loads the built app, and checks Chrome’s parsed manifest and installability errors. It covers the initial signed-in visit before a service worker can mask manifest-auth failures. The manifest link uses `crossorigin="use-credentials"`, required even on the same origin when the manifest is protected by sign-in. This browser test does not emulate Android’s WebAPK minting service; final installation on the actual phone still requires confirmation.

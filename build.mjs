@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist', { recursive: true });
 await cp('public', 'dist', { recursive: true });
+await cp('node_modules/web-tree-sitter/web-tree-sitter.wasm','dist/parsers/web-tree-sitter.wasm');
+await cp('node_modules/web-tree-sitter/LICENSE','dist/parsers/LICENSE-runtime.txt');
 await cp('node_modules/katex/dist/katex.min.css','dist/katex.css');
 await cp('node_modules/katex/LICENSE','dist/fonts/LICENSE-KaTeX.txt');
 for (const name of await readdir('node_modules/katex/dist/fonts')) if (name.endsWith('.woff2')) await cp('node_modules/katex/dist/fonts/'+name,'dist/fonts/'+name);

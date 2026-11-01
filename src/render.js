@@ -130,3 +130,34 @@ export async function decorate(container, note, snapshot, assetURL, depth = 0, a
   }
   await Promise.all(jobs);
 }
+
+// Source-first reader: parser tokens colour syntax without typesetting the note.
+// All raw HTML stays escaped. Destinations are concealed, not evaluated.
+const sourceMD = new MarkdownIt({html:false, linkify:false, breaks:false});
+sourceMD.inline.ruler.before('link', 'wiki', ((state, silent) => {
+  const match = state.src.slice(state.pos).match(/^(!?)\[\[([^\]\n]+)\]\]/);
+  if (!match) return false;
+  if (!silent) { const [target,label] = match[2].split('|'); const t=state.push('wiki_link','',0); t.meta={target,label:label || target.split('/').at(-1).replace(/\.md$/i,'')}; }
+  state.pos += match[0].length; return true;
+}));
+sourceMD.renderer.rules.wiki_link = md.renderer.rules.wiki_link;
+for (const type of ['strong','em','s']) for (const side of ['open','close']) sourceMD.renderer.rules[type+'_'+side] = (tokens,i) => side==='open' ? `<span class="syntax-${type}">${escape(tokens[i].markup)}` : `${escape(tokens[i].markup)}</span>`;
+sourceMD.renderer.rules.code_inline = (tokens,i) => `<span class="syntax-code">${escape(tokens[i].markup+tokens[i].content+tokens[i].markup)}</span>`;
+sourceMD.renderer.rules.image = (tokens,i) => `<a href="${escape(tokens[i].attrGet('src') || '')}">![${escape(tokens[i].content)}]</a>`;
+sourceMD.renderer.rules.softbreak = () => '\n';
+sourceMD.renderer.rules.hardbreak = () => '  \n';
+export function renderSource(body) {
+  const lines=body.split('\n'), styles=new Map(), literal=new Set();
+  for (const t of sourceMD.parse(body,{})) {
+    if (!t.map) continue;
+    const [start,end]=t.map;
+    if (['fence','code_block','html_block'].includes(t.type)) for(let i=start;i<end;i++) literal.add(i);
+    const style=t.type==='heading_open' ? 'heading' : t.type==='fence'||t.type==='code_block' ? 'code' : t.type==='blockquote_open' ? 'quote' : t.type==='hr' ? 'rule' : '';
+    if(style) for(let i=start;i<end;i++) styles.set(i,style);
+  }
+  return lines.map((line,i)=>{
+    const kind=styles.get(i)||'';
+    const heading=kind==='heading' ? ` data-heading="${escape(line.replace(/^\s*#+\s*/, '').replace(/\s+#+\s*$/, ''))}"` : '';
+    return `<div class="source-line syntax-${kind}"${heading}><span class="line-number" aria-hidden="true">${i+1}</span><span class="line-text">${literal.has(i)?escape(line):sourceMD.renderInline(line)}</span></div>`;
+  }).join('');
+}

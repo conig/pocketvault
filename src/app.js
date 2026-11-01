@@ -48,10 +48,10 @@ function filters() {
 function openSettings() {
   $('#device-diagnostics').hidden = true; $('#device-diagnostics').textContent = '';
   const connected = !!snapshot && !demo;
-  $('#connection-title').textContent = connected ? 'Settings' : 'Connect your vaults.';
+  $('#connection-title').textContent = connected ? 'Settings' : 'Connect';
   $('#vault-settings').hidden = !connected;
   $('#connection-details').open = !connected;
-  $('#connect-submit').textContent = connected ? 'Update connection ↗' : 'Connect & download ↗';
+  $('#connect-submit').textContent = connected ? 'Update connection' : 'Connect';
   const options = $('#vault-options'); options.replaceChildren();
   if (connected) {
     const chosen = selectedVaults(config.vaults);
@@ -97,30 +97,19 @@ function connectionActions(root) {
   root.querySelector('[data-demo]')?.addEventListener('click', loadDemo);
 }
 function welcome() {
-  const root = $('#reader-content'); root.replaceChildren();
-  const block = el('div', 'welcome');
-  if (snapshot) {
-    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">~/vaults</div><h2>Select a note.</h2><p>Choose a note or search your library. Everything here is ready to read, even offline.</p><div class="welcome-foot">/ to search · #tag to filter · read only</div>';
-  } else {
-    block.innerHTML = '<div class="welcome-mark" aria-hidden="true">[[ ]]</div><div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>Open your vaults.</h2><p>Find a recipe, revisit an idea, look up that thing you wrote down. Your notes, without the editing tools.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button><div class="welcome-foot">PRIVATE BY DESIGN<br>Read-only GitHub access. Search and read offline.</div>';
-  }
-  root.append(block); connectionActions(block);
+  $('#reader-content').replaceChildren();
+  if (!snapshot && !$('#connection-dialog').open) openSettings();
 }
 function drawList({ preserveLimit = false } = {}) {
+  document.body.classList.toggle('setup', !snapshot);
   if (!preserveLimit) listLimit = 50;
   const list = $('#note-list'); list.replaceChildren();
   $('#demo-badge').hidden = !demo;
   const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault, tag) : [];
   $('#result-count').textContent = snapshot ? `${notes.length.toLocaleString()} ${notes.length === 1 ? 'note' : 'notes'}${$('#search').value ? ' found' : ''}` : 'Your notes live here';
-  if (!snapshot) {
-    const empty = el('div', 'mobile-connect');
-    empty.innerHTML = '<div class="eyebrow">YOUR VAULTS, WITH YOU</div><h2>Open your vaults.</h2><p>Your GitHub notes, ready to read and search. No editing tools. No extra sync service.</p><button class="primary" data-connect>Connect GitHub <span>↗</span></button><button class="text-button" data-demo>Explore a sample library</button>';
-    list.append(empty); connectionActions(empty);
-    const desktop = el('div', 'empty-list empty-library-desktop'); desktop.innerHTML = '<strong>Four vaults. One search.</strong>Connect your repository to bring your notes here.'; list.append(desktop);
-    return;
-  }
+  if (!snapshot) return;
   if (!notes.length) {
-    const empty = el('div', 'empty-list'); empty.append(el('strong', '', 'Nothing here just yet.'), el('span', '', 'Try another word or choose All vaults. Search looks through titles and note contents.')); list.append(empty); return;
+    const empty = el('div', 'empty-list'); empty.append(el('span', '', 'No matches')); list.append(empty); return;
   }
   const fragment = document.createDocumentFragment();
   for (const note of notes.slice(0, listLimit)) {
@@ -129,7 +118,8 @@ function drawList({ preserveLimit = false } = {}) {
     const meta = el('span', 'row-meta'); meta.append(el('span', '', note.vault), el('span', 'row-arrow', '↗'));
     row.append(el('h2', '', note.title));
     if (note.tags.length) row.append(el('span', 'row-tags', note.tags.map(t=>'#'+t).join(' ')));
-    row.append(el('p', '', snippet(note, $('#search').value)), meta);
+    if ($('#search').value) row.append(el('p', '', snippet(note, $('#search').value)));
+    row.append(meta);
     if (note.date) meta.append(el('span', '', note.date));
     row.onclick = () => navigate(note.path);
     fragment.append(row);
@@ -169,7 +159,7 @@ function navigate(path, anchor = '') {
 }
 function scrollToAnchor(root, anchor) {
   if (!anchor) return;
-  const heading = [...root.querySelectorAll('h1,h2,h3,h4,h5,h6')].find(h => fold(h.textContent).replace(/\s+/g, '-') === fold(anchor).replace(/\s+/g, '-') || fold(h.textContent) === fold(anchor));
+  const heading = [...root.querySelectorAll('[data-heading]')].find(h => fold(h.dataset.heading).replace(/\s+/g, '-') === fold(anchor).replace(/\s+/g, '-') || fold(h.dataset.heading) === fold(anchor));
   if (heading) heading.scrollIntoView({ block: 'start' });
   else toast('Heading not found in this note.');
 }
@@ -177,26 +167,19 @@ async function showNote(path, anchor = '') {
   const note = snapshot?.notes.find(n => n.path === path);
   if (!note) { toast('That note is not in the saved library.'); return; }
   const version = ++renderVersion;
-  const { renderMarkdown, decorate } = await renderer();
+  const { renderSource, decorate } = await renderer();
   if (version !== renderVersion) return;
   selected = path; drawList({preserveLimit:true}); $('.workspace').classList.add('note-open');
   const root = $('#reader-content'); root.replaceChildren();
   const nav = el('div', 'reader-nav');
   const back = el('button', 'back-button', '← Library'); back.type = 'button'; back.onclick = closeNote;
-  nav.append(back, el('span', 'reader-breadcrumb', note.vault), el('span', 'reading-label', 'Reading view'));
+  nav.append(back, el('span', 'reader-breadcrumb', note.title));
   const article = el('article', 'article');
-  article.append(el('div', 'eyebrow', note.vault + ' / read only'), el('h1', 'note-title', note.title));
-  article.append(el('div', 'note-meta', [note.date, `${note.minutes || 1} min read`, ...(note.facts || []).map(f=>`${f.label}: ${f.value}`)].filter(Boolean).join(' · ')));
-  if (note.tags.length) { const tags = el('div', 'note-tags'); for (const tag of note.tags) tags.append(el('span', '', '#' + tag.replace(/^#/, ''))); article.append(tags); }
-  const prose = el('div', 'prose');
-  // Metadata precedes the H1 in many agent notes; strip it first so generated
-  // IDs cannot reappear as a second, oversized title inside the article.
-  let body = note.body.replace(/^(?:\s*(?:Tags|Date):[^\n]*(?:\n|$))+/i, '');
-  const leading = body.match(/^\s*#\s+(.+)(?:\r?\n|$)/);
-  if (leading && (fold(leading[1].replace(/[*`]/g,'')) === fold(note.title) || /^\d{10,13}(?:[-_]|$)/.test(leading[1]))) body = body.slice(leading[0].length);
-  prose.innerHTML = renderMarkdown(body); article.append(prose);
-  const source = el('details', 'article-footer'); source.append(el('summary', '', 'Source details'), el('div', '', `${demo ? 'Sample library' : 'GitHub · ' + snapshot.commit.slice(0, 7)} · ${note.path}`)); article.append(source);
+  const prose = el('div', 'prose source-view');
+  prose.innerHTML = renderSource(note.body); article.append(prose);
   root.append(nav, article); $('#reader').scrollTop = 0;
+  // Paint source immediately; parser initialization never blocks reading.
+  import('./syntax.js').then(m=>m.highlightSource(prose,note.body)).catch(()=>{});
   await decorate(prose, note, snapshot, assetURL);
   if (version !== renderVersion) return;
   scrollToAnchor(article, anchor);
@@ -292,8 +275,8 @@ $('#connection-form').addEventListener('submit', event => {
 $('#settings').onclick = openSettings;
 $('#diagnose-device').onclick = diagnoseDevice;
 $('#save-vaults').onclick = saveVaultSelection;
-$('#close-settings').onclick = () => { $('#connection-dialog').close(); $('#token-input').value = ''; };
-$('#connection-dialog').addEventListener('cancel', () => { $('#token-input').value = ''; });
+$('#close-settings').onclick = () => { if (!snapshot) return; $('#connection-dialog').close(); $('#token-input').value = ''; };
+$('#connection-dialog').addEventListener('cancel', (event) => { if (!snapshot) { event.preventDefault(); return; } $('#token-input').value = ''; });
 $('#refresh').onclick = () => { if (demo || !snapshot || (config.authRequired && !token)) openSettings(); else refresh(); };
 $('#search').addEventListener('input', () => drawList());
 $('#tag-filter').onchange = () => { tag = $('#tag-filter').value; drawList(); };

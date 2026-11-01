@@ -13,7 +13,7 @@ await context.route('https://api.github.com/**',route=>{
 });
 async function countStored(){return page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pocket-vault');q.onsuccess=()=>r(q.result);});return new Promise(r=>{const q=db.transaction('data').objectStore('data').get('snapshot');q.onsuccess=()=>r(q.result?.notes.length);});});}
 try{
- await page.goto('http://127.0.0.1:4173');await page.locator('.mobile-connect [data-connect]').click();await page.locator('#repo-input').fill('fixture/notes');await page.locator('#token-input').fill('fake-token');await page.locator('#remember-token').check();await page.locator('#connect-submit').click();await page.waitForFunction(()=>document.querySelectorAll('.note-row').length===2);
+ await page.goto('http://127.0.0.1:4173');await page.locator('#repo-input').waitFor({state:'visible'});await page.locator('#repo-input').fill('fixture/notes');await page.locator('#token-input').fill('fake-token');await page.locator('#remember-token').check();await page.locator('#connect-submit').click();await page.waitForFunction(()=>document.querySelectorAll('.note-row').length===2);
  await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  fail=true;await page.reload();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Could not reach GitHub'));
  assert.equal(await countStored(),2);assert.equal(await page.locator('.note-row').count(),2);

@@ -1,6 +1,6 @@
 import {currentTheme, saveTheme, forgetTheme} from './theme.js';
 import { VAULTS, selectedVaults, selectSavedVaults, countVaults, cachedNote, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
-import { read, hasKey, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
+import { read, hasKey, write, saveConnection, clearAll, readAsset, writeAsset, readAccesses, writeAccess } from './storage.js';
 import {discoverRepositories, discoverBranches} from './connection.js';
 const renderer = () => import('./render.js');
 // Recovery is a one-shot launch action, not a permanent network requirement.
@@ -11,6 +11,7 @@ const el = (tag, className, text) => { const n = document.createElement(tag); if
 let snapshot = null, config = { repo: '', branch: '' }, token = '', remembered = false;
 let vault = 'all', selected = '', busy = false, demo = false, controller, noticeTimer, epoch = 0, renderVersion = 0;
 const urls = new Map();
+let accessTimes = new Map();
 const hadController = !!navigator.serviceWorker?.controller;
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) $('#apply-update').hidden = false; });
 $('#apply-update').onclick = () => location.reload();
@@ -114,7 +115,7 @@ function drawList({ preserveLimit = false } = {}) {
   if (!preserveLimit) listLimit = 50;
   const list = $('#note-list'); list.replaceChildren();
   $('#demo-badge').hidden = !demo;
-  const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault, tag) : [];
+  const notes = snapshot ? searchNotes(snapshot.notes, $('#search').value, vault, tag, accessTimes) : [];
   $('#result-count').textContent = snapshot ? `${notes.length.toLocaleString()} ${notes.length === 1 ? 'note' : 'notes'}${$('#search').value ? ' found' : ''}${tag ? ' · #' + tag : ''}` : 'Your notes live here';
   if (!snapshot) return;
   if (!notes.length) {
@@ -172,12 +173,16 @@ function scrollToAnchor(root, anchor) {
   if (heading) heading.scrollIntoView({ block: 'start' });
   else toast('Heading not found in this note.');
 }
-async function showNote(path, anchor = '') {
+async function showNote(path, anchor = '', { recordAccess = true } = {}) {
   const note = snapshot?.notes.find(n => n.path === path);
   if (!note) { toast('That note is not in the saved library.'); return; }
   const version = ++renderVersion;
   const { renderSource, decorate } = await renderer();
   if (version !== renderVersion) return;
+  if (recordAccess) {
+    const at = Date.now(); accessTimes.set(path, at);
+    if (!demo) writeAccess(snapshot.repo, snapshot.branch, path, at).catch(() => toast('Read order could not be saved on this device.'));
+  }
   selected = path; drawList({preserveLimit:true}); $('.workspace').classList.add('note-open');
   const root = $('#reader-content'); root.replaceChildren();
   const nav = el('div', 'reader-nav');
@@ -267,10 +272,13 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
     }
     await saveConnection(next, nextConfig, keepToken ? nextToken : '');
     if (generation !== epoch) return;
+    const retainedPaths = new Set(next.notes.map(n => n.path));
+    accessTimes = !demo && snapshot?.repo === next.repo && snapshot?.branch === next.branch
+      ? new Map([...accessTimes].filter(([path]) => retainedPaths.has(path))) : new Map();
     config = nextConfig; token = nextToken; remembered = keepToken; snapshot = next; demo = false; revokeAssets();
     if (!background) { $('#connection-dialog').close(); $('#token-input').value = ''; }
     tagOptions(); filters(); drawList();
-    if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected);
+    if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected, '', {recordAccess:false});
     else { selected = ''; ++renderVersion; history.replaceState(null, '', location.pathname + location.search); $('.workspace').classList.remove('note-open'); welcome(); }
     navigator.storage?.persist?.().catch(() => {});
   } catch (error) {
@@ -294,7 +302,7 @@ function loadDemo() {
     ['codex/Reading offline.md', '# Reading offline\n\nPocket Vault saves your downloaded notes in this browser. Search runs locally, so reading and finding notes work without a connection.\n\n## Refreshing\n\nOpen the app while online to check for the latest GitHub snapshot. Only changed notes need downloading. Images are cached when viewed.\n\n```text\nGitHub → saved snapshot → local search\n```\n\nThere are no editing controls and no repository write operations.']
   ];
   snapshot = { repo: 'sample/library', branch: '', commit: 'sample0', checkedAt: Date.now(), notes: samples.map(([p, b]) => parseNote(p, b)), files: samples.map(([path]) => ({ path })) };
-  demo = true; tagOptions(); filters(); drawList(); status(); welcome();
+  demo = true; accessTimes = new Map(); tagOptions(); filters(); drawList(); status(); welcome();
   if (matchMedia('(min-width: 761px)').matches) showNote(snapshot.notes[0].path);
 }
 let discoveryController, pendingConnection, branchVersion = 0;
@@ -432,6 +440,7 @@ $('#forget').onclick = async () => {
   controller?.abort(); ++epoch; ++renderVersion;
   try {
     await clearAll();
+    accessTimes.clear();
     let themeCleared=true;
     try { forgetTheme(); } catch { themeCleared=false; }
     revokeAssets(); token = ''; remembered = false; snapshot = null; demo = false; selected = ''; config = { repo: '', branch: '' }; vault = 'all'; $('#search').value = ''; $('#token-input').value = '';
@@ -447,6 +456,7 @@ async function boot() {
   try {
     const [saved, settings, credential, lastCheck] = await Promise.all([read('snapshot'), read('config'), read('credential'), read('lastCheck')]);
     snapshot = saved ? {...saved, notes:saved.notes.map(cachedNote)} : null;
+    if (snapshot) accessTimes = await readAccesses(snapshot.repo, snapshot.branch);
     if (snapshot && lastCheck?.repo === snapshot.repo && lastCheck?.commit === snapshot.commit) snapshot.checkedAt = Math.max(snapshot.checkedAt, lastCheck.at);
     if (settings) config = settings; token = credential || ''; remembered = !!credential;
     tagOptions(); filters(); status(); route();

@@ -28,7 +28,12 @@ export function allowedPath(path) {
   const parts = path.split('/');
   return VAULTS.includes(parts[0]) && parts.length > 1 && parts.every(p => p && p !== '..' && !p.startsWith('.'));
 }
-export const NOTE_FORMAT = 2;
+export const NOTE_FORMAT = 3;
+function timestamp(value) {
+  const time = typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(time) && time > 0 ? time : 0;
+}
+const firstTimestamp = (...values) => values.map(timestamp).find(Boolean) || 0;
 const cleanTitle = value => String(value || '').replace(/^(?:\d{10,13}|\d{4}-\d{2}-\d{2})[-_\s]+/, '').replace(/[_]+/g, ' ').replace(/[*`]/g, '').trim();
 export function parseNote(path, raw, sha = '') {
   let body = raw.replace(/^\uFEFF/, ''), meta = {};
@@ -54,10 +59,14 @@ export function parseNote(path, raw, sha = '') {
   const tags = [...unique.values()];
   const dateValue = meta.updated || meta.modified || meta.date || meta.created || body.match(/^Date:\s*(\d{4}-\d{2}-\d{2})/mi)?.[1] || filename.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
   const date = dateValue ? String(dateValue).slice(0, 10) : '';
+  const modifiedAt = firstTimestamp(meta.modified, meta.updated, meta.modified_at, meta.updated_at, meta.modifiedAt, meta.updatedAt);
+  const createdAt = firstTimestamp(meta.created, meta.created_at, meta.createdAt, meta.date,
+    body.match(/^Date:\s*(\d{4}-\d{2}-\d{2})/mi)?.[1], filename.match(/^\d{4}-\d{2}-\d{2}/)?.[0],
+    Number(filename.match(/^(\d{10}|\d{13})(?:[-_\s]|$)/)?.[1]));
   const facts = [['serves','Serves'], ['prep','Prep'], ['cook','Cook'], ['rating','Rating']].filter(([key]) => ['string','number'].includes(typeof meta[key])).map(([key,label]) => ({label, value: String(meta[key])}));
   const plain = body.replace(/^#\s+.+$/m, '').replace(/```[\s\S]*?```/g, ' ').replace(/!?(?:\[\[([^\]]+)\]\])/g, '$1').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/^Tags:.*$/gmi, '').replace(/[#*_`>|~]/g, '').replace(/\s+/g, ' ').trim();
   const words = plain.split(/\s+/).filter(Boolean).length;
-  return { path, sha, vault: path.split('/')[0], title, aliases, body, tags, date, facts, words, minutes: Math.max(1, Math.ceil(words / 220)), plain, search: fold(title + ' ' + aliases.join(' ') + ' ' + path + ' ' + tags.join(' ') + ' ' + body), formatVersion: NOTE_FORMAT };
+  return { path, sha, vault: path.split('/')[0], title, aliases, body, tags, date, modifiedAt, createdAt, facts, words, minutes: Math.max(1, Math.ceil(words / 220)), plain, search: fold(title + ' ' + aliases.join(' ') + ' ' + path + ' ' + tags.join(' ') + ' ' + body), formatVersion: NOTE_FORMAT };
 }
 // Old snapshots stay immediately readable; only a background sync recovers
 // frontmatter fields absent from old caches. Never delay launch for migration.
@@ -66,14 +75,19 @@ export function cachedNote(note) {
   const parsed = parseNote(note.path, note.body, note.sha);
   const title = /^\d{10,13}[-_]/.test(note.title || '') ? cleanTitle(note.title).replace(/-/g, ' ') : cleanTitle(note.title) || parsed.title;
   const tags = [...new Set([...(note.tags || []), ...parsed.tags])];
-  return { ...parsed, title, tags, search: fold(title + ' ' + tags.join(' ') + ' ' + note.body), formatVersion: note.formatVersion || 0 };
+  const aliases = note.aliases || parsed.aliases;
+  return { ...parsed, ...note, date: note.date || parsed.date, modifiedAt: note.modifiedAt || parsed.modifiedAt, createdAt: note.createdAt || timestamp(note.date) || parsed.createdAt, title, tags, aliases, search: fold(title + ' ' + aliases.join(' ') + ' ' + note.path + ' ' + tags.join(' ') + ' ' + note.body), formatVersion: note.formatVersion || 0 };
 }
-export function searchNotes(notes, query, vault = 'all', tag = '') {
+export function searchNotes(notes, query, vault = 'all', tag = '', accessTimes = new Map()) {
   const terms = [...fold(query).matchAll(/"([^"]+)"|(\S+)/g)].map(m => m[1] || m[2]);
   const tagMatch = (n, t) => n.tags.some(v => fold(v) === fold(t) || fold(v).startsWith(fold(t) + '/'));
   const rows = notes.filter(n => (vault === 'all' || n.vault === vault) && (!tag || tagMatch(n, tag)) && terms.every(t => t.startsWith('#') ? tagMatch(n, t.slice(1)) : n.search.includes(t)));
-  if (!terms.length) return rows.slice().sort((a,b) => a.title.localeCompare(b.title));
-  return rows.map(note => ({ note, score: terms.reduce((s,t) => s + (fold(note.title).includes(t) ? 10 : 0) + (tagMatch(note,t.replace(/^#/,'')) ? 3 : 0),0) })).sort((a,b) => b.score-a.score || a.note.title.localeCompare(b.note.title)).map(r=>r.note);
+  // Access wins when available; unopened notes use their own metadata, never
+  // the download time. Keep full precision and deterministic ties.
+  const recent = n => accessTimes.get(n.path) || n.modifiedAt || n.createdAt || timestamp(n.date);
+  const byRecency = (a,b) => recent(b)-recent(a) || (b.modifiedAt || 0)-(a.modifiedAt || 0) || (b.createdAt || 0)-(a.createdAt || 0) || a.title.localeCompare(b.title) || a.path.localeCompare(b.path);
+  if (!terms.length) return rows.sort(byRecency);
+  return rows.map(note => ({ note, score: terms.reduce((s,t) => s + (fold(note.title).includes(t) ? 10 : 0) + (tagMatch(note,t.replace(/^#/,'')) ? 3 : 0),0) })).sort((a,b) => b.score-a.score || byRecency(a.note,b.note)).map(r=>r.note);
 }
 export function snippet(note, query) {
   const term = fold(query).match(/"([^"]+)"|(\S+)/)?.[0]?.replaceAll('"', '') || '';

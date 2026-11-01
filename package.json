@@ -17,6 +17,7 @@
     "test:workspace": "node test/workspace.mjs",
     "test:tags": "node test/tags.mjs",
     "test:themes": "node test/themes.mjs",
+    "test:sorting": "node test/sorting.mjs",
     "themes:import": "node scripts/import-base46.mjs",
     "test:privacy": "node test/privacy.mjs"
   },

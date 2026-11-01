@@ -22,6 +22,12 @@ export const write = (key, value) => run('data', 'readwrite', s => s.put(value, 
 export const remove = key => run('data', 'readwrite', s => s.delete(key));
 export const readAsset = key => run('assets', 'readonly', s => s.get(key));
 export const writeAsset = (key, value) => run('assets', 'readwrite', s => s.put(value, key));
+// Separate records avoid rewriting the snapshot on every read, and prevent
+// simultaneous tabs opening different notes from overwriting one another.
+const accessRange = (prefix = []) => IDBKeyRange.bound(['access', ...prefix], ['access', ...prefix, []]);
+export const readAccesses = (repo, branch = '') => run('data', 'readonly', s => s.getAll(accessRange([repo, branch])))
+  .then(rows => new Map(rows.map(({path, at}) => [path, at])));
+export const writeAccess = (repo, branch, path, at) => write(['access', repo, branch || '', path], {path, at});
 export async function clearAll() {
   await run('data', 'readwrite', s => s.clear());
   await run('assets', 'readwrite', s => s.clear());
@@ -31,6 +37,15 @@ export async function saveConnection(snapshot, config, credential) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['data', 'assets'], 'readwrite'), store = tx.objectStore('data');
     store.put(snapshot, 'snapshot'); store.put(config, 'config');
+    const notePaths = new Set(snapshot.notes.map(n => n.path));
+    const accesses = store.openCursor(accessRange());
+    accesses.onsuccess = () => {
+      const item = accesses.result;
+      if (!item) return;
+      const [, repo, branch, path] = item.key;
+      if (repo !== snapshot.repo || branch !== (snapshot.branch || '') || !notePaths.has(path)) item.delete();
+      item.continue();
+    };
     // Purge attachments no longer referenced by the selected vaults in the
     // same transaction: a failed save cannot leave half-applied settings.
     const retained = new Set(snapshot.files.map(f => `${snapshot.repo}:${f.sha}`));

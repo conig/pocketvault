@@ -159,3 +159,38 @@ test('useful metadata is compact and generated identifiers do not become title f
   assert.equal(n.title,'Lemon pasta'); assert.equal(n.date,'2026-11-02'); assert.equal(n.minutes,1); assert.equal(n.facts.length,3);
   assert.equal(parseNote('work/1770000000-project-plan.md','# 1770000000-project-plan').title,'project plan');
 });
+
+test('library orders newest access, falling back to modified then created, with undated notes last', () => {
+  const notes = [
+    parseNote('work/a.md', '---\ncreated: 2020-01-01\n---\n# A old'),
+    parseNote('work/b.md', '---\ncreated: 2026-01-01\n---\n# B created'),
+    parseNote('work/z.md', '---\nmodified: 2026-02-01T12:30:00Z\ncreated: 2019-01-01\n---\n# Z modified'),
+    parseNote('work/c.md', '# C undated'),
+  ];
+  const paths = (query = '', access = new Map()) => searchNotes(notes, query, 'all', '', access).map(n => n.path);
+  assert.deepEqual(paths(), ['work/z.md', 'work/b.md', 'work/a.md', 'work/c.md']);
+  const access = new Map([['work/a.md', Date.parse('2026-03-01')], ['work/c.md', Date.parse('2025-01-01')]]);
+  assert.deepEqual(paths('', access), ['work/a.md', 'work/z.md', 'work/b.md', 'work/c.md']);
+  assert.deepEqual(paths('old', access), ['work/a.md']);
+  assert.equal(notes[2].modifiedAt, Date.parse('2026-02-01T12:30:00Z'));
+  assert.equal(notes[2].createdAt, Date.parse('2019-01-01'));
+});
+
+test('recency handles date fallbacks, invalid metadata, same-day times, and cached metadata', () => {
+  const newer = parseNote('work/new.md', '---\nupdated: 2026-02-01T18:00:00Z\n---\n# Z reference');
+  const older = parseNote('work/old.md', '---\nmodified: invalid\nupdated: 2026-02-01T09:00:00Z\n---\n# A reference');
+  const named = parseNote('work/1700000000-note.md', '# Timestamp note');
+  const dated = parseNote('work/2025-04-05-note.md', '# Dated note');
+  const body = parseNote('work/body.md', '# Body note\n\nDate: 2025-05-06');
+  assert.deepEqual(searchNotes([older, newer], 'reference').map(n => n.path), [newer.path, older.path]);
+  assert.equal(named.createdAt, 1700000000000);
+  assert.equal(dated.createdAt, Date.parse('2025-04-05'));
+  assert.equal(body.createdAt, Date.parse('2025-05-06'));
+  const cached = cachedNote({...older, formatVersion: 2, date: '2026-02-01'});
+  assert.equal(cached.date, '2026-02-01');
+  const legacy = cachedNote({ ...older, formatVersion: 2, aliases: ['Useful alias'], facts: [{label:'Rating',value:'90'}] });
+  assert.deepEqual(legacy.aliases, ['Useful alias']);
+  assert.deepEqual(legacy.facts, [{label:'Rating',value:'90'}]);
+  assert.equal(searchNotes([legacy], '"useful alias"').length, 1);
+  assert.equal(searchNotes([newer, parseNote('work/match.md', '# Match\nreference')], 'reference')[0].path, newer.path, 'title relevance still outranks recency');
+});

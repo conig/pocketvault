@@ -1,4 +1,4 @@
-import { VAULTS, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
+import { VAULTS, selectedVaults, selectSavedVaults, countVaults, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
 import { read, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
 import { renderMarkdown, decorate } from './render.js';
 const $ = selector => document.querySelector(selector);
@@ -21,7 +21,9 @@ function status() {
 }
 function filters() {
   const root = $('#filters'); root.replaceChildren();
-  for (const value of ['all', ...VAULTS]) {
+  const enabled = snapshot && !demo ? selectedVaults(config.vaults) : VAULTS;
+  if (!enabled.includes(vault)) vault = 'all';
+  for (const value of ['all', ...enabled]) {
     const button = el('button', `filter${vault === value ? ' active' : ''}`, value === 'all' ? 'All vaults' : value[0].toUpperCase() + value.slice(1));
     button.type = 'button'; button.setAttribute('aria-pressed', String(vault === value));
     button.onclick = () => { vault = value; filters(); drawList(); };
@@ -29,12 +31,50 @@ function filters() {
   }
 }
 function openSettings() {
+  const connected = !!snapshot && !demo;
+  $('#connection-title').textContent = connected ? 'Settings' : 'Connect your vaults.';
+  $('#vault-settings').hidden = !connected;
+  $('#connection-details').open = !connected;
+  $('#connect-submit').textContent = connected ? 'Update connection ↗' : 'Connect & download ↗';
+  const options = $('#vault-options'); options.replaceChildren();
+  if (connected) {
+    const chosen = selectedVaults(config.vaults);
+    const counts = snapshot.vaultCounts || countVaults(snapshot.files);
+    for (const value of VAULTS) {
+      const label = el('label', 'vault-choice');
+      const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.name = 'vault'; checkbox.value = value; checkbox.checked = chosen.includes(value);
+      const count = counts[value] || 0;
+      const name = value[0].toUpperCase() + value.slice(1);
+      checkbox.setAttribute('aria-label', name);
+      label.append(checkbox, el('span', '', name), el('small', '', `${count} ${count === 1 ? 'note' : 'notes'}`)); options.append(label);
+    }
+  }
   $('#repo-input').value = config.repo;
   $('#branch-input').value = config.branch;
   $('#token-input').value = token;
   $('#remember-token').checked = remembered;
   $('#connection-error').hidden = true;
   $('#connection-dialog').showModal();
+}
+function settingsError(message) {
+  $('#connection-error').textContent = message; $('#connection-error').hidden = false;
+  $('#connection-error').scrollIntoView({ block: 'nearest' });
+}
+function saveVaultSelection() {
+  if (!snapshot || demo || busy) return;
+  try {
+    const vaults = selectedVaults([...$('#vault-options').querySelectorAll('input:checked')].map(input => input.value));
+    const previous = selectedVaults(snapshot.vaults);
+    const savedOnly = vaults.every(value => previous.includes(value));
+    const nextToken = $('#token-input').value.trim();
+    if (!savedOnly && config.authRequired && !nextToken) {
+      $('#connection-details').open = true;
+      settingsError('Enter your read-only GitHub token to download newly selected vaults.');
+      $('#token-input').focus(); return;
+    }
+    if (!savedOnly && !navigator.onLine) { settingsError('Go online to download newly selected vaults. Your current selection is unchanged.'); return; }
+    refresh({ ...config, vaults }, savedOnly ? token : nextToken, savedOnly ? remembered : $('#remember-token').checked, { savedOnly });
+  } catch (error) { settingsError(error.message); }
 }
 function connectionActions(root) {
   root.querySelector('[data-connect]')?.addEventListener('click', openSettings);
@@ -141,13 +181,13 @@ function route() {
   if (p.has('note') && snapshot) showNote(p.get('note'), p.get('heading') || '').catch(error => toast(error.message));
   else { selected = ''; $('.workspace').classList.remove('note-open'); drawList(); welcome(); }
 }
-async function refresh(nextConfig = config, nextToken = token, keepToken = remembered) {
+async function refresh(nextConfig = config, nextToken = token, keepToken = remembered, { savedOnly = false } = {}) {
   if (busy) return;
   busy = true; controller = new AbortController(); const generation = ++epoch;
-  $('#refresh').disabled = true; $('#refresh').classList.add('spinning'); $('#connect-submit').disabled = true;
-  $('#sync-status').textContent = 'Checking GitHub…'; $('#connection-error').hidden = true;
+  $('#refresh').disabled = true; $('#refresh').classList.add('spinning'); $('#connect-submit').disabled = true; $('#save-vaults').disabled = true;
+  $('#sync-status').textContent = savedOnly ? 'Saving vault selection…' : 'Checking GitHub…'; $('#connection-error').hidden = true;
   try {
-    const next = await fetchSnapshot(nextConfig, nextToken, demo ? null : snapshot, { signal: controller.signal, onProgress: (done, total) => { $('#sync-status').textContent = `Saving notes ${done} / ${total}…`; } });
+    const next = savedOnly ? selectSavedVaults(snapshot, nextConfig.vaults) : await fetchSnapshot(nextConfig, nextToken, demo ? null : snapshot, { signal: controller.signal, onProgress: (done, total) => { $('#sync-status').textContent = `Saving notes ${done} / ${total}…`; } });
     if (generation !== epoch) return;
     await saveConnection(next, nextConfig, keepToken ? nextToken : '');
     if (generation !== epoch) return;
@@ -155,7 +195,7 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
     $('#connection-dialog').close(); $('#token-input').value = '';
     filters(); drawList();
     if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected);
-    else { selected = ''; $('.workspace').classList.remove('note-open'); welcome(); }
+    else { selected = ''; ++renderVersion; history.replaceState(null, '', location.pathname + location.search); $('.workspace').classList.remove('note-open'); welcome(); }
     toast(`${snapshot.notes.length} notes ready to read offline.`);
     navigator.storage?.persist?.().catch(() => {});
   } catch (error) {
@@ -165,7 +205,7 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
     $('#connection-error').textContent = message; $('#connection-error').hidden = false;
     toast(message, 12000);
   } finally {
-    busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('spinning'); $('#connect-submit').disabled = false; status();
+    busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('spinning'); $('#connect-submit').disabled = false; $('#save-vaults').disabled = false; status();
   }
 }
 function loadDemo() {
@@ -184,10 +224,11 @@ function loadDemo() {
 }
 $('#connection-form').addEventListener('submit', event => {
   event.preventDefault();
-  try { const next = { repo: repository($('#repo-input').value), branch: $('#branch-input').value.trim(), authRequired: !!$('#token-input').value.trim() }; refresh(next, $('#token-input').value.trim(), $('#remember-token').checked); }
+  try { const next = { repo: repository($('#repo-input').value), branch: $('#branch-input').value.trim(), authRequired: !!$('#token-input').value.trim(), vaults: selectedVaults(config.vaults) }; refresh(next, $('#token-input').value.trim(), $('#remember-token').checked); }
   catch (error) { $('#connection-error').textContent = error.message; $('#connection-error').hidden = false; }
 });
 $('#settings').onclick = openSettings;
+$('#save-vaults').onclick = saveVaultSelection;
 $('#close-settings').onclick = () => { $('#connection-dialog').close(); $('#token-input').value = ''; };
 $('#connection-dialog').addEventListener('cancel', () => { $('#token-input').value = ''; });
 $('#refresh').onclick = () => { if (demo || !snapshot || (config.authRequired && !token)) openSettings(); else refresh(); };

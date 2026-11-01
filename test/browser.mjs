@@ -35,7 +35,7 @@ try {
   }
   await page.locator('.mobile-connect [data-connect]').click();
   await page.locator('#repo-input').fill('owner/notes'); await page.locator('#token-input').fill('test-read-only-token');
-  await page.getByRole('button', { name: 'Connect & download' }).click();
+  await page.locator('#connect-submit').click();
   await page.waitForFunction(() => document.querySelector('#result-count').textContent === '3 notes');
   check(await page.locator('.note-row').count() === 3, 'downloads a repository and lists all notes');
   check(requests.every(r => r.method === 'GET' && r.url.startsWith('https://api.github.com/') && r.auth === 'Bearer test-read-only-token'), 'all authenticated requests are GETs to GitHub only');
@@ -73,8 +73,9 @@ try {
   await page.screenshot({ path: '/tmp/pocket-vault-qa/mobile-reader.png', fullPage: true, animations: 'disabled' });
   await context.setOffline(false);
   await page.getByRole('button', { name: 'Connection and device settings' }).click();
+  await page.locator('#connection-details').evaluate(n => n.open = true);
   await page.locator('#token-input').fill('test-read-only-token'); await page.locator('#remember-token').check();
-  await page.getByRole('button', { name: 'Connect & download' }).click();
+  await page.locator('#connect-submit').click();
   await page.waitForFunction(() => !document.querySelector('#connection-dialog').open);
   check(await page.evaluate(async () => { const db = await new Promise(resolve => { const r = indexedDB.open('pocket-vault'); r.onsuccess = () => resolve(r.result); }); return new Promise(resolve => { const r = db.transaction('data').objectStore('data').get('credential'); r.onsuccess = () => resolve(r.result === 'test-read-only-token'); }); }), 'remember-token opt-in persists only on this browser');
   const callsBeforeReload = requests.length;

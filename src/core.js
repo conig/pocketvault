@@ -1,5 +1,23 @@
 import { parse } from 'yaml';
 export const VAULTS = ['work', 'personal', 'cooking', 'codex'];
+// Missing selection means all vaults for snapshots created before this setting.
+export function selectedVaults(selection) {
+  if (selection === undefined) return [...VAULTS];
+  if (!Array.isArray(selection) || selection.some(v => !VAULTS.includes(v))) throw new Error('Choose from work, personal, cooking, and codex.');
+  const chosen = VAULTS.filter(v => selection.includes(v));
+  if (!chosen.length) throw new Error('Select at least one vault.');
+  return chosen;
+}
+export function selectSavedVaults(snapshot, selection) {
+  const vaults = selectedVaults(selection);
+  const saved = selectedVaults(snapshot.vaults);
+  if (vaults.some(v => !saved.includes(v))) throw new Error('Connect to GitHub to download newly selected vaults.');
+  const include = path => vaults.includes(path.split('/')[0]);
+  return { ...snapshot, vaults, vaultCounts: snapshot.vaultCounts || countVaults(snapshot.files), notes: snapshot.notes.filter(n => include(n.path)), files: snapshot.files.filter(f => include(f.path)) };
+}
+export function countVaults(files) {
+  return Object.fromEntries(VAULTS.map(v => [v, files.filter(f => f.path.startsWith(v + '/') && /\.md$/i.test(f.path)).length]));
+}
 export const fold = value => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 export function repository(value) {
   const text = value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
@@ -68,17 +86,23 @@ export async function github(repo, endpoint, token, { signal, fetcher = fetch } 
 }
 export async function fetchSnapshot(config, token, previous, { signal, fetcher, onProgress = () => {} } = {}) {
   const repo = repository(config.repo);
+  const vaults = selectedVaults(config.vaults);
   const get = endpoint => github(repo, endpoint, token, { signal, fetcher });
   const commits = await get(config.branch ? `commits/${encodeURIComponent(config.branch)}` : 'commits?per_page=1');
   const commit = Array.isArray(commits) ? commits[0] : commits;
   if (!commit?.sha || !commit?.commit?.tree?.sha) throw new Error('This repository has no readable commits.');
   const sameSource = previous?.repo === repo && previous?.branch === config.branch;
-  if (sameSource && commit.sha === previous.commit) return { ...previous, checkedAt: Date.now() };
+  const sameCommit = sameSource && commit.sha === previous.commit;
+  const sameSelection = sameSource && JSON.stringify(vaults) === JSON.stringify(selectedVaults(previous.vaults));
+  if (sameCommit && sameSelection) return { ...previous, vaults, checkedAt: Date.now() };
+  // Re-read the pinned tree when the selection changes, even on the same
+  // commit. Persist counts only, never excluded note names or their content.
   const tree = await get(`git/trees/${commit.commit.tree.sha}?recursive=1`);
   if (tree.truncated) throw new Error('GitHub returned an incomplete file listing. Saved notes have not been replaced.');
-  const files = tree.tree.filter(f => f.type === 'blob' && f.mode !== '120000' && allowedPath(f.path));
+  const catalog = tree.tree.filter(f => f.type === 'blob' && f.mode !== '120000' && allowedPath(f.path));
+  if (!catalog.some(f => /\.md$/i.test(f.path))) throw new Error('No Markdown notes found in work, personal, cooking, or codex.');
+  const files = catalog.filter(f => vaults.includes(f.path.split('/')[0]));
   const markdown = files.filter(f => /\.md$/i.test(f.path));
-  if (!markdown.length) throw new Error('No Markdown notes found in work, personal, cooking, or codex.');
   const old = new Map((sameSource ? previous.notes : []).map(n => [n.path, n]));
   const notes = new Array(markdown.length); let next = 0, done = 0;
   await Promise.all(Array.from({ length: Math.min(3, markdown.length) }, async () => {
@@ -95,5 +119,5 @@ export async function fetchSnapshot(config, token, previous, { signal, fetcher, 
       onProgress(++done, markdown.length);
     }
   }));
-  return { repo, branch: config.branch, commit: commit.sha, checkedAt: Date.now(), savedAt: Date.now(), notes, files };
+  return { repo, branch: config.branch, vaults, commit: commit.sha, checkedAt: Date.now(), savedAt: Date.now(), notes, files, vaultCounts: countVaults(catalog) };
 }

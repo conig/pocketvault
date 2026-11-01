@@ -28,8 +28,18 @@ export async function clearAll() {
 export async function saveConnection(snapshot, config, credential) {
   const db = await database();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('data', 'readwrite'), store = tx.objectStore('data');
+    const tx = db.transaction(['data', 'assets'], 'readwrite'), store = tx.objectStore('data');
     store.put(snapshot, 'snapshot'); store.put(config, 'config');
+    // Purge attachments no longer referenced by the selected vaults in the
+    // same transaction: a failed save cannot leave half-applied settings.
+    const retained = new Set(snapshot.files.map(f => `${snapshot.repo}:${f.sha}`));
+    const cursor = tx.objectStore('assets').openCursor();
+    cursor.onsuccess = () => {
+      const item = cursor.result;
+      if (!item) return;
+      if (!retained.has(item.key)) item.delete();
+      item.continue();
+    };
     if (credential) store.put(credential, 'credential'); else store.delete('credential');
     tx.oncomplete = () => resolve();
     tx.onerror = tx.onabort = () => reject(tx.error || new Error('Could not save your library. Your previous snapshot is unchanged.'));

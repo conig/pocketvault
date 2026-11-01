@@ -18,6 +18,28 @@
 <section class="reader" id="reader" aria-label="Note reader"><div id="reader-content"></div></section>
 </main>
 <div id="notice" class="notice" role="status" hidden></div>
-<dialog id="connection-dialog" aria-labelledby="connection-title"><form id="connection-form"><div class="dialog-top"><span class="eyebrow">GITHUB · READ ONLY</span><button type="button" id="close-settings" class="icon-button" aria-label="Close settings">×</button></div><h2 id="connection-title">Connect your vaults.</h2><p class="muted">One repository. Your notes stay between GitHub and this device.</p><label>Repository<input name="repo" id="repo-input" placeholder="owner/repository" required autocomplete="off" spellcheck="false"></label><label>Branch <span class="optional">optional · defaults to repository default</span><input name="branch" id="branch-input" placeholder="Default branch" autocomplete="off" spellcheck="false"></label><label>Read-only GitHub token<input name="token" id="token-input" type="password" autocomplete="off" placeholder="github_pat_…" spellcheck="false"></label><p class="field-help">Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained token ↗</a>: select only your vault repository and set <strong>Contents → Read-only</strong>. Public repositories do not need a token. Never paste a token into chat.</p><label class="checkbox"><input type="checkbox" id="remember-token"><span>Remember token on this device <small>Stored in browser storage, not encrypted. Use only on a trusted device.</small></span></label><p class="privacy-note">Notes are saved locally for offline reading. Anyone with access to this browser profile can read cached notes. No analytics, write access, or server-side note storage.</p><p id="connection-error" class="error" role="alert" hidden></p><div class="dialog-actions"><button class="primary" id="connect-submit" type="submit">Connect & download <span>↗</span></button><button type="button" class="text-button danger" id="forget">Forget this device</button></div><details><summary>Offline & installation</summary><p>After a successful download, reading and search work offline. On Android, use Chrome’s menu → Add to home screen / Install app. Refresh runs on opening when connected; it does not run while the app is closed. Images are cached when viewed. Only work, personal, cooking, and codex folders are included.</p></details></form></dialog>
+<dialog id="connection-dialog" aria-labelledby="connection-title">
+<form id="connection-form">
+<div class="dialog-top"><span class="eyebrow">GITHUB · READ ONLY</span><button type="button" id="close-settings" class="icon-button" aria-label="Close settings">×</button></div>
+<h2 id="connection-title">Connect your vaults.</h2>
+<section id="vault-settings" hidden aria-labelledby="vault-settings-title">
+<fieldset class="vault-choices"><legend id="vault-settings-title">Vaults on this device</legend><p class="field-help">Choose which vaults to download, search, and show. Removing a vault clears its saved notes and attachments from this device, not GitHub.</p><div id="vault-options"></div></fieldset>
+<p class="field-help">Removing vaults works offline. Adding vaults needs an internet connection and GitHub access.</p>
+<button type="button" class="primary" id="save-vaults">Save vault selection <span>✓</span></button>
+</section>
+<details id="connection-details" open><summary>GitHub connection</summary>
+<p class="muted">One repository. Your notes stay between GitHub and this device.</p>
+<label>Repository<input name="repo" id="repo-input" placeholder="owner/repository" required autocomplete="off" spellcheck="false"></label>
+<label>Branch <span class="optional">optional · defaults to repository default</span><input name="branch" id="branch-input" placeholder="Default branch" autocomplete="off" spellcheck="false"></label>
+<label>Read-only GitHub token<input name="token" id="token-input" type="password" autocomplete="off" placeholder="github_pat_…" spellcheck="false"></label>
+<p class="field-help">Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained token ↗</a>: select only your vault repository and set <strong>Contents → Read-only</strong>. Public repositories do not need a token. Never paste a token into chat.</p>
+<label class="checkbox"><input type="checkbox" id="remember-token"><span>Remember token on this device <small>Stored in browser storage, not encrypted. Use only on a trusted device.</small></span></label>
+<button class="primary" id="connect-submit" type="submit">Connect & download <span>↗</span></button>
+</details>
+<p class="privacy-note">Notes are saved locally for offline reading. Anyone with access to this browser profile can read cached notes. No analytics, write access, or server-side note storage.</p>
+<p id="connection-error" class="error" role="alert" hidden></p>
+<button type="button" class="text-button danger" id="forget">Forget this device</button>
+<details><summary>Offline & installation</summary><p>After a successful download, reading and search work offline. On Android, use Chrome’s menu → Add to home screen / Install app. Refresh runs on opening when connected; it does not run while the app is closed. Images are cached when viewed. Only your selected work, personal, cooking, and codex folders are included.</p></details>
+</form></dialog>
 <script type="module" src="/app.js"></script>
 </body></html>

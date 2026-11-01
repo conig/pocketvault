@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allowedPath, repository, parseNote, searchNotes, snippet, resolveFile, fetchSnapshot, github } from '../src/core.js';
+import { VAULTS, selectedVaults, selectSavedVaults, allowedPath, repository, parseNote, searchNotes, snippet, resolveFile, fetchSnapshot, github } from '../src/core.js';
 const sha = 'a'.repeat(40), treeSha = 'b'.repeat(40);
 const commit = (value = sha) => ({ sha: value, commit: { tree: { sha: treeSha } } });
 const file = (path, sha = 'file1') => ({ path, sha, type: 'blob', mode: '100644', size: 30 });
@@ -95,4 +95,48 @@ test('branch names are encoded, requests can be aborted, and public requests omi
   assert.ok(calls[0].url.endsWith('feature%2Fnotes'));
   const abort = new AbortController(); abort.abort();
   await assert.rejects(fetchSnapshot({ repo: 'owner/notes', branch: '' }, '', null, { fetcher, signal: abort.signal }));
+});
+
+test('vault selections default safely for existing installs and reject empty/unknown choices', () => {
+  assert.deepEqual(selectedVaults(undefined), VAULTS);
+  assert.deepEqual(selectedVaults(['cooking', 'work', 'cooking']), ['work', 'cooking']);
+  for (const selection of [[], ['.aws'], ['work', '../personal'], 'work', null]) assert.throws(() => selectedVaults(selection));
+});
+test('selected snapshots download no excluded note contents and keep only vault counts', async () => {
+  const routes = structuredClone(base);
+  routes[`git/trees/${treeSha}?recursive=1`].tree.push(file('cooking/Recipe.md', 'recipe'), file('work/image.png', 'image'));
+  routes['git/blobs/recipe'] = { encoding: 'base64', content: Buffer.from('# Recipe\nLemon').toString('base64') };
+  const { fetcher, calls } = mock(routes);
+  const snap = await fetchSnapshot({ repo: 'owner/notes', branch: '', vaults: ['cooking'] }, '', null, { fetcher });
+  assert.deepEqual(snap.notes.map(n => n.path), ['cooking/Recipe.md']);
+  assert.deepEqual(snap.files.map(f => f.path), ['cooking/Recipe.md']);
+  assert.equal(snap.vaultCounts.work, 1); assert.equal(snap.vaultCounts.cooking, 1);
+  assert.equal(snap.catalog, undefined);
+  assert.ok(!calls.some(c => c.url.endsWith('/file1')));
+});
+test('adding a vault on the same commit fetches its missing contents without redownloading saved notes', async () => {
+  const routes = structuredClone(base);
+  routes[`git/trees/${treeSha}?recursive=1`].tree.push(file('cooking/Recipe.md', 'recipe'));
+  routes['git/blobs/recipe'] = { encoding: 'base64', content: Buffer.from('# Recipe').toString('base64') };
+  const previous = { repo: 'owner/notes', branch: '', commit: sha, vaults: ['work'], notes: [parseNote('work/Note.md', '# Cached', 'file1')], files: [file('work/Note.md')] };
+  const { fetcher, calls } = mock(routes);
+  const snap = await fetchSnapshot({ repo: 'owner/notes', branch: '', vaults: ['work', 'cooking'] }, '', previous, { fetcher });
+  assert.equal(snap.notes.length, 2); assert.equal(snap.notes[0].title, 'Cached');
+  assert.equal(calls.filter(c => c.url.includes('/git/blobs/')).length, 1);
+  assert.ok(calls.some(c => c.url.endsWith('/recipe')));
+  assert.deepEqual(previous.vaults, ['work']);
+});
+test('offline removal drops excluded notes/files, preserves counts/freshness, and refuses uncached expansion', () => {
+  const old = { repo: 'owner/notes', branch: '', commit: sha, checkedAt: 123, notes: [parseNote('work/Note.md', '# Work'), parseNote('cooking/Recipe.md', '# Recipe')], files: [file('work/Note.md'), file('work/image.png'), file('cooking/Recipe.md')] };
+  const subset = selectSavedVaults(old, ['cooking']);
+  assert.equal(subset.checkedAt, 123); assert.equal(subset.commit, sha);
+  assert.deepEqual(subset.notes.map(n => n.vault), ['cooking']); assert.equal(subset.files.length, 1);
+  assert.equal(subset.vaultCounts.work, 1); assert.equal(old.notes.length, 2);
+  assert.throws(() => selectSavedVaults(subset, ['work', 'cooking']), /download newly selected/);
+});
+test('a selected empty vault is valid and keeps available-vault counts for settings', async () => {
+  const { fetcher, calls } = mock(base);
+  const snap = await fetchSnapshot({ repo: 'owner/notes', branch: '', vaults: ['cooking'] }, '', null, { fetcher });
+  assert.equal(snap.notes.length, 0); assert.equal(snap.vaultCounts.work, 1);
+  assert.equal(calls.length, 2);
 });

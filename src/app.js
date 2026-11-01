@@ -1,6 +1,9 @@
 import { VAULTS, selectedVaults, selectSavedVaults, countVaults, cachedNote, repository, searchNotes, snippet, parseNote, fetchSnapshot, github, bytesFromBase64, fold } from './core.js';
-import { read, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
+import { read, hasKey, write, saveConnection, clearAll, readAsset, writeAsset } from './storage.js';
 const renderer = () => import('./render.js');
+// Recovery is a one-shot launch action, not a permanent network requirement.
+const launchURL = new URL(location.href);
+if (launchURL.searchParams.has('recover')) { launchURL.searchParams.delete('recover'); history.replaceState(null, '', launchURL.pathname + launchURL.search + launchURL.hash); }
 const $ = selector => document.querySelector(selector);
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
 let snapshot = null, config = { repo: 'user/vault', branch: '' }, token = '', remembered = false;
@@ -43,6 +46,7 @@ function filters() {
   }
 }
 function openSettings() {
+  $('#device-diagnostics').hidden = true; $('#device-diagnostics').textContent = '';
   const connected = !!snapshot && !demo;
   $('#connection-title').textContent = connected ? 'Settings' : 'Connect your vaults.';
   $('#vault-settings').hidden = !connected;
@@ -202,9 +206,37 @@ function closeNote() {
   selected = ''; renderVersion++; $('.workspace').classList.remove('note-open'); drawList(); welcome(); $('#search').focus({ preventScroll: true });
 }
 function route() {
+  // Always expose the cached library before resolving a restored/deep link or
+  // loading renderer chunks. A missing note must not make all notes disappear.
+  drawList();
   const p = new URLSearchParams(location.hash.slice(1));
-  if (p.has('note') && snapshot) showNote(p.get('note'), p.get('heading') || '').catch(error => toast(error.message));
-  else { selected = ''; $('.workspace').classList.remove('note-open'); drawList(); welcome(); }
+  if (p.has('note') && snapshot?.notes.some(note => note.path === p.get('note'))) {
+    showNote(p.get('note'), p.get('heading') || '').catch(error => {
+      selected = ''; $('.workspace').classList.remove('note-open'); welcome();
+      toast('The reader could not open that note. Your saved library is still shown.');
+    });
+  } else {
+    if (p.has('note')) history.replaceState(null, '', location.pathname + location.search);
+    selected = ''; $('.workspace').classList.remove('note-open'); welcome();
+  }
+}
+async function diagnoseDevice() {
+  const output = $('#device-diagnostics'); $('#diagnose-device').disabled = true;
+  output.textContent = 'Checking this device without changing stored data…'; output.hidden = false;
+  const lines = ['Address: ' + location.origin];
+  try {
+    const saved = await read('snapshot');
+    lines.push('Saved notes: ' + (saved?.notes?.length ?? 0));
+    lines.push('Saved vaults: ' + (saved ? selectedVaults(saved.vaults).join(', ') : 'none on this address'));
+    lines.push('Remembered token: ' + (await hasKey('credential') ? 'yes (value hidden)' : 'no'));
+    lines.push('Storage protected from eviction: ' + (await navigator.storage?.persisted?.() ? 'yes' : 'not guaranteed'));
+  } catch { lines.push('Saved notes: could not read device storage (not erased)'); }
+  try {
+    const response = await fetch('https://api.github.com/rate_limit', {credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)});
+    lines.push('GitHub public connection: HTTP ' + response.status);
+    lines.push('Private-repository access is a separate token/permission check.');
+  } catch { lines.push('GitHub public connection: failed on this device. Check network/VPN/filtering.'); }
+  output.textContent = lines.join('\n'); $('#diagnose-device').disabled = false;
 }
 async function refresh(nextConfig = config, nextToken = token, keepToken = remembered, { savedOnly = false, background = false } = {}) {
   if (busy || (background && $('#connection-dialog').open)) return;
@@ -231,7 +263,7 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
   } catch (error) {
     controller?.abort();
     if (generation !== epoch || error.name === 'AbortError') return;
-    const message = error instanceof TypeError ? 'Could not reach GitHub. Check your connection; saved notes are still available.' : error.message;
+    const message = error instanceof TypeError ? 'Could not reach GitHub. The saved library was not changed. Check device diagnostics in Settings.' : error.message;
     $('#connection-error').textContent = message; $('#connection-error').hidden = false;
     toast(message, 12000);
   } finally {
@@ -258,6 +290,7 @@ $('#connection-form').addEventListener('submit', event => {
   catch (error) { $('#connection-error').textContent = error.message; $('#connection-error').hidden = false; }
 });
 $('#settings').onclick = openSettings;
+$('#diagnose-device').onclick = diagnoseDevice;
 $('#save-vaults').onclick = saveVaultSelection;
 $('#close-settings').onclick = () => { $('#connection-dialog').close(); $('#token-input').value = ''; };
 $('#connection-dialog').addEventListener('cancel', () => { $('#token-input').value = ''; });

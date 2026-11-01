@@ -17,6 +17,7 @@ async function run(store, mode, action) {
   });
 }
 export const read = key => run('data', 'readonly', s => s.get(key));
+export const hasKey = key => run('data', 'readonly', s => s.getKey(key)).then(value => value !== undefined);
 export const write = (key, value) => run('data', 'readwrite', s => s.put(value, key));
 export const remove = key => run('data', 'readwrite', s => s.delete(key));
 export const readAsset = key => run('assets', 'readonly', s => s.get(key));

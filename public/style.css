@@ -13,3 +13,5 @@
 .prose .align-right{text-align:right}.prose .align-center{text-align:center}.prose .align-left{text-align:left}
 
 .update-button{border:1px solid #48653d;background:var(--accent-soft);color:var(--accent);border-radius:2px;font-size:9px;padding:5px 8px;margin-left:auto;white-space:nowrap}
+
+#device-diagnostics{font:10px/1.9 var(--sans);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--paper);border:1px solid var(--line);padding:12px;margin-top:14px}

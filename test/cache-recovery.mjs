@@ -43,6 +43,8 @@ try{
  assert.ok((await page.locator('body').innerText()).includes('have not been erased'));
  await context.setOffline(false);await page.goto(origin+'/?recover=1');
  assert.equal(await page.title(),'Pocket Vault','Recovery must repair the shell automatically when online.');
+ assert.equal(new URL(page.url()).searchParams.has('recover'),false,'Successful recovery must not leave every later launch in forced-network recovery mode.');
+ await context.setOffline(true);await page.reload();assert.equal(await page.title(),'Pocket Vault','After repair the next launch must work offline.');await context.setOffline(false);
  const intact=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pocket-vault');q.onsuccess=()=>r(q.result);});return new Promise(r=>{const q=db.transaction('data').objectStore('data').get('recovery-sentinel');q.onsuccess=()=>r(q.result?.preserve);});});assert.equal(intact,true);
  await page.goto(origin+'/signin-with-chatgpt');assert.equal(await page.title(),'Sign in','The worker must not swallow sign-in/callback navigation.');
  console.log('PASS missing-cache/offline recovery, online repair, authentication route passthrough, and preserved local data.');

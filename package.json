@@ -12,7 +12,8 @@
     "test:vaults": "node test/vaults.mjs",
     "test:performance": "node test/performance.mjs",
     "test:rendering": "node test/rendering.mjs",
-    "test:cache-recovery": "node test/cache-recovery.mjs"
+    "test:cache-recovery": "node test/cache-recovery.mjs",
+    "test:startup-retention": "node test/startup-retention.mjs"
   },
   "dependencies": {
     "dompurify": "^3.3.0",

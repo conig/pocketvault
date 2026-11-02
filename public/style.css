@@ -45,3 +45,12 @@ dialog.theme-page-open{overflow:hidden;min-height:min(400px,calc(100dvh - 48px))
 /* Connection source choices share the app’s native form styling. */
 dialog select{display:block;margin-top:8px;width:100%;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:0;background:var(--paper);color:var(--ink);padding:11px;font-size:12px}#source-submit{width:100%;margin-top:12px}
 @media(max-width:760px){dialog select{font-size:16px}}
+/* Native note links retain the row presentation; pane focus is explicit. */
+a.note-row{text-decoration:none;color:inherit}
+.reader:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Native details can retain child boxes in QtWebEngine's hint discovery. */
+details:not([open])>:not(summary){display:none!important}
+/* Keep secondary control labels readable on raised/selected surfaces. */
+.filter-menu[open]>summary,.filter-menu[open] .filter:not(.active),#theme-name,.note-row.selected .row-meta{color:var(--ink)}
+/* Preview sample copy is decorative, but still needs readable contrast. */
+.theme-preview :is(.row-tags,p,.row-meta){color:var(--ink)}

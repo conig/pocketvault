@@ -46,7 +46,11 @@ function filters() {
   for (const value of ['all', ...enabled]) {
     const button = el('button', `filter${vault === value ? ' active' : ''}`, value === 'all' ? 'All vaults' : value[0].toUpperCase() + value.slice(1));
     button.type = 'button'; button.setAttribute('aria-pressed', String(vault === value));
-    button.onclick = () => { vault = value; filters(); drawList(); };
+    button.onclick = () => {
+      const focused = document.activeElement === button;
+      vault = value; filters(); drawList();
+      if (focused) root.querySelector('[aria-pressed="true"]').focus({ preventScroll: true });
+    };
     root.append(button);
   }
 }
@@ -107,6 +111,8 @@ function connectionActions(root) {
 }
 function welcome() {
   $('#reader-content').replaceChildren();
+  $('#reader').setAttribute('aria-label', 'Note reader');
+  document.title = 'Pocket Vault';
   if (!snapshot && !$('#connection-dialog').open) openSettings();
 }
 function drawList({ preserveLimit = false } = {}) {
@@ -122,7 +128,8 @@ function drawList({ preserveLimit = false } = {}) {
   }
   const fragment = document.createDocumentFragment();
   for (const note of notes.slice(0, listLimit)) {
-    const row = el('button', `note-row${selected === note.path ? ' selected' : ''}`); row.type = 'button'; row.dataset.path = note.path;
+    const row = el('a', `note-row${selected === note.path ? ' selected' : ''}`); row.dataset.path = note.path;
+    row.href = '#note=' + encodeURIComponent(note.path);
     if (selected === note.path) row.setAttribute('aria-current', 'page');
     const meta = el('span', 'row-meta'); meta.append(el('span', '', note.vault), el('span', 'row-arrow', '↗'));
     row.append(el('h2', '', note.title));
@@ -130,7 +137,13 @@ function drawList({ preserveLimit = false } = {}) {
     if ($('#search').value) row.append(el('p', '', snippet(note, $('#search').value)));
     row.append(meta);
     if (note.date) meta.append(el('span', '', note.date));
-    row.onclick = () => navigate(note.path);
+    // Keep native link hints, copy/open-in-new-tab and modified clicks. A
+    // repeated selection still reopens/focuses the note without a hashchange.
+    row.onclick = event => {
+      if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && location.hash === row.hash) {
+        event.preventDefault(); navigate(note.path);
+      }
+    };
     fragment.append(row);
   }
   list.append(fragment);
@@ -172,7 +185,7 @@ function scrollToAnchor(root, anchor) {
   if (heading) heading.scrollIntoView({ block: 'start' });
   else toast('Heading not found in this note.');
 }
-async function showNote(path, anchor = '', { recordAccess = true } = {}) {
+async function showNote(path, anchor = '', { recordAccess = true, focus = true } = {}) {
   const note = snapshot?.notes.find(n => n.path === path);
   if (!note) { toast('That note is not in the saved library.'); return; }
   const version = ++renderVersion;
@@ -203,6 +216,12 @@ async function showNote(path, anchor = '', { recordAccess = true } = {}) {
   }
   article.append(prose);
   root.append(nav, article); $('#reader').scrollTop = 0;
+  $('#reader').setAttribute('aria-label', `Note reader: ${note.title}`);
+  document.title = `${note.title} · Pocket Vault`;
+  // Focus the actual scroll container, not a heading or the replaced result
+  // row. Do this before optional async decoration, without resetting anchors
+  // or stealing focus from Settings/background refreshes.
+  if (focus && !document.querySelector('dialog[open]')) $('#reader').focus({ preventScroll: true });
   // Paint source immediately; parser initialization never blocks reading.
   import('./syntax.js').then(m=>m.highlightSource(prose,note.body)).catch(()=>{});
   await decorate(prose, note, snapshot, assetURL);
@@ -277,7 +296,7 @@ async function refresh(nextConfig = config, nextToken = token, keepToken = remem
     config = nextConfig; token = nextToken; remembered = keepToken; snapshot = next; demo = false; revokeAssets();
     if (!background) { $('#connection-dialog').close(); $('#token-input').value = ''; }
     tagOptions(); filters(); drawList();
-    if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected, '', {recordAccess:false});
+    if (selected && snapshot.notes.some(n => n.path === selected)) await showNote(selected, '', {recordAccess:false,focus:false});
     else { selected = ''; ++renderVersion; history.replaceState(null, '', location.pathname + location.search); $('.workspace').classList.remove('note-open'); welcome(); }
     navigator.storage?.persist?.().catch(() => {});
   } catch (error) {

@@ -19,7 +19,8 @@
     "test:themes": "node test/themes.mjs",
     "test:sorting": "node test/sorting.mjs",
     "themes:import": "node scripts/import-base46.mjs",
-    "test:privacy": "node test/privacy.mjs"
+    "test:privacy": "node test/privacy.mjs",
+    "test:accessibility": "node test/accessibility.mjs"
   },
   "dependencies": {
     "@mdit/plugin-tex": "^1.2.0",

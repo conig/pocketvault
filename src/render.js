@@ -101,7 +101,13 @@ export async function decorate(container, note, snapshot, assetURL, depth = 0, a
     }
     const resolved = resolveNote(target, note.path, snapshot);
     if (resolved) { a.dataset.path = resolved.path; a.dataset.anchor = resolved.anchor; a.href = `#note=${encodeURIComponent(resolved.path)}${resolved.anchor ? '&heading=' + encodeURIComponent(resolved.anchor) : ''}`; }
-    else { a.removeAttribute('href'); a.classList.add('unresolved'); a.title = 'This link is not available in the saved library.'; }
+    else {
+      // An anchor without href is still a qutebrowser "all" hint target.
+      // Unavailable references are text, not dead interactive controls.
+      const text = document.createElement('span'); text.className = 'unresolved';
+      text.title = 'This link is not available in the saved library.';
+      text.append(...a.childNodes); a.replaceWith(text);
+    }
   }
   for (const img of container.querySelectorAll('img')) {
     const resolved = resolveFile(img.getAttribute('src') || '', note.path, files);
@@ -187,17 +193,18 @@ sourceMD.renderer.rules.tag_link = (tokens, i) => {
 };
 export function renderSource(body, noteTags = []) {
   const tags = new Map(noteTags.map(tag => [fold(tag), tag]));
-  const lines=body.split('\n'), styles=new Map(), literal=new Set();
+  const lines=body.split('\n'), styles=new Map(), literal=new Set(), headings=new Map();
   for (const t of sourceMD.parse(body,{})) {
     if (!t.map) continue;
     const [start,end]=t.map;
+    if (t.type==='heading_open') headings.set(start, Number(t.tag.slice(1)));
     if (['fence','code_block','html_block'].includes(t.type)) for(let i=start;i<end;i++) literal.add(i);
     const style=t.type==='heading_open' ? 'heading' : t.type==='fence'||t.type==='code_block' ? 'code' : t.type==='blockquote_open' ? 'quote' : t.type==='hr' ? 'rule' : '';
     if(style) for(let i=start;i<end;i++) styles.set(i,style);
   }
   return lines.map((line,i)=>{
     const kind=styles.get(i)||'';
-    const heading=kind==='heading' ? ` data-heading="${escape(line.replace(/^\s*#+\s*/, '').replace(/\s+#+\s*$/, ''))}"` : '';
+    const heading=kind==='heading' ? ` data-heading="${escape(line.replace(/^\s*#+\s*/, '').replace(/\s+#+\s*$/, ''))}"${headings.has(i) ? ` role="heading" aria-level="${headings.get(i)}"` : ''}` : '';
     return `<div class="source-line syntax-${kind}"${heading}><span class="line-number" aria-hidden="true">${i+1}</span><span class="line-text">${literal.has(i)?escape(line):sourceMD.renderInline(line, { tags, tagLine: /^Tags:\s*\S/i.test(line) })}</span></div>`;
   }).join('');
 }

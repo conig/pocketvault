@@ -14,10 +14,10 @@
 <main class="workspace">
 <section class="library" aria-label="Note library">
 <div class="library-top"><div class="eyebrow">YOUR LIBRARY</div><label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="search" type="search" autocomplete="off" placeholder="Search…" aria-label="Search all your notes"><kbd>/</kbd></label><details class="filter-menu"><summary>Filter</summary><label class="tag-control">Tags <select id="tag-filter" aria-label="Filter by tag"><option value="">All tags</option></select></label><div id="filters" class="filters" role="group" aria-label="Filter by vault"></div></details></div>
-<div class="list-heading"><span id="result-count">Your notes live here</span><span id="demo-badge" hidden>Sample library</span></div><div id="note-list" class="note-list"></div>
+<div class="list-heading"><span id="result-count" role="status" aria-live="polite" aria-atomic="true">Your notes live here</span><span id="demo-badge" hidden>Sample library</span></div><nav id="note-list" class="note-list" aria-label="Notes"></nav>
 <footer class="library-footer"><span id="connection-dot" class="dot"></span><span id="sync-status" role="status" aria-live="polite">Not connected</span><button id="apply-update" class="update-button" hidden>Reload update</button></footer>
 </section>
-<section class="reader" id="reader" aria-label="Note reader"><div id="reader-content"></div></section>
+<section class="reader" id="reader" tabindex="-1" aria-label="Note reader"><div id="reader-content"></div></section>
 </main>
 <div id="notice" class="notice" role="status" hidden></div>
 <dialog id="connection-dialog" aria-labelledby="connection-title">

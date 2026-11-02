@@ -89,6 +89,9 @@ npm run test:vaults
 npm run test:rendering
 npm run test:performance
 npm run test:tags
+# Current source workspace and desktop keyboard/hint regressions:
+npm run test:workspace
+npm run test:accessibility
 # Self-contained theme/persistence/offline suite (no preview needed):
 npm run test:themes
 # Self-contained newest-first order and offline access-history checks:
@@ -122,6 +125,14 @@ Successful repair removes the one-shot `recover` query flag from the current URL
 ## Focused source workspace
 
 Setup occupies its own screen until a snapshot exists. Connected users see only the library and reader; settings and filters are on demand. Base46-themed panes default to NvChad One Dark and use self-hosted JetBrains Mono. Source reading preserves Markdown headings, emphasis delimiters, list markers, fences, tables and spacing, with coloured syntax and concealed clickable link destinations. No generated article title, reading-time block, explanatory welcome, or persistent offline notice. Raw HTML remains inert. Source paints immediately using the existing parser, then a lazy Tree-sitter Markdown parser adds structural highlighting. Runtime and canonical v0.5.4 grammar are self-hosted and cached offline; neither delays the library or initial source paint. CSP permits WebAssembly compilation only, not JavaScript eval. Source mode intentionally shows math, tables and embed notation rather than typesetting them. The existing rich renderer remains available internally for regression coverage.
+
+## Desktop keyboard and accessibility
+
+Opening a note moves focus to the named reader pane so PageDown/PageUp and qutebrowser scrolling act on the note. Library returns focus to search; `/` opens search. Note rows are native links (including copy-link, hint link groups and Ctrl-click/new tabs), with the selected note marked as current. Source headings expose heading levels without turning line numbers or syntax decoration into interactive targets. Search result counts are announced politely, dialogs use native modal focus handling, and the focused reader has a visible outline.
+
+Unavailable references are plain, labelled-by-context text rather than dead anchors. Closed disclosure contents explicitly have no layout boxes: QtWebEngine/qutebrowser can otherwise offer phantom hints over hidden filter controls. No browser-specific configuration changes are needed. `test:accessibility` covers focus/scrolling, native navigation, heading/landmark semantics, collapsed hint targets and modal keyboard behavior using synthetic notes. These improvements are not a claim of complete WCAG conformance or manual screen-reader certification across every imported theme.
+
+The older `test:browser`, `test:vaults` and `test:rendering` scripts still target the retired rich-reader setup UI and currently stop at the removed `.mobile-connect` control (also reproduced on unchanged source). Use the current workspace, accessibility, privacy, tags, themes, sorting, startup, recovery, installation and performance suites for the source workspace; the legacy harnesses need a separate migration before they can provide meaningful coverage again.
 
 ## Connection discovery and privacy
 

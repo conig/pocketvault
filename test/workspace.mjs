@@ -21,7 +21,7 @@ try{
  assert.equal(await page.locator('.source-view script').count(),0);assert.equal(await page.locator('.source-view a[data-path]').count(),1);assert.equal(await page.locator('.source-view .syntax-heading').count(),2);
  assert.ok(await page.locator('a[href="https://example.com/a-long-url"]').isVisible());
  await page.screenshot({path:'/tmp/pocket-reader.png'});
- await page.locator('a[data-path]').click();await page.waitForFunction(()=>document.querySelector('.source-view')?.textContent.includes('A second note.'));
+ await page.locator('#reader a[data-path]').click();await page.waitForFunction(()=>document.querySelector('.source-view')?.textContent.includes('A second note.'));
  await page.setViewportSize({width:1440,height:960});await page.locator('.note-row').filter({hasText:'Field notes'}).click();await page.locator('[data-syntax-engine="tree-sitter"]').waitFor();await page.screenshot({path:'/tmp/pocket-desktop.png'});
  await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);await context.setOffline(true);await page.reload();await page.locator('[data-syntax-engine="tree-sitter"]').waitFor();
  assert.ok((await page.locator('.source-view').innerText()).includes('**what matters**'));assert.deepEqual(errors,[]);

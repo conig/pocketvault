@@ -7,7 +7,7 @@ await mkdir('dist', { recursive: true });
 await cp('public', 'dist', { recursive: true });
 const catalog=JSON.parse(await readFile('src/themes/base46.json','utf8'));
 await writeFile('dist/themes.css',themeCSS(catalog));
-const previews=Object.entries(catalog.themes).map(([id])=>`<button type="button" class="note-row theme-preview" data-preview-theme="${id}" aria-label="${id}" aria-pressed="false"><h2>${id}</h2><span class="row-tags">#notes #ideas</span><p>Keep what matters. Leave room to think.</p><span class="row-meta"><span>personal</span></span></button>`).join('');
+const previews=Object.entries(catalog.themes).map(([id])=>`<button type="button" class="note-row theme-preview" data-preview-theme="${id}" aria-pressed="false"><h2>${id}</h2><span aria-hidden="true" class="row-tags">#notes #ideas</span><p aria-hidden="true">Keep what matters. Leave room to think.</p><span aria-hidden="true" class="row-meta"><span>personal</span></span></button>`).join('');
 await writeFile('dist/index.html',(await readFile('public/index.html','utf8')).replace('<!-- THEME_PREVIEWS -->',previews));
 await cp('third_party/base46','dist/licenses/base46',{recursive:true});
 await build({entryPoints:['src/theme-start.js'],bundle:true,minify:true,format:'iife',target:['es2022'],outfile:'dist/theme-start.js'});
